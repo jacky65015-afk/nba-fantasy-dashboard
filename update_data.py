@@ -67,6 +67,10 @@ def boxscore_players(summary, fallback_date):
                 athlete = item.get('athlete') or {}
                 vals = item.get('stats') or []
                 stats = dict(zip(names, vals))
+                # ESPN may place total rebounds under 'rebounds' or label 'REB'.
+                # Merge matching display labels without overwriting canonical keys.
+                for k, v in zip(labels, vals):
+                    stats.setdefault(k, v)
                 # ESPN box scores typically expose min, fg, 3pt, ft, reb, ast, stl, blk, to, pf, pts
                 def as_number(*candidates):
                     for k in candidates:
@@ -94,7 +98,7 @@ def boxscore_players(summary, fallback_date):
                 rows.append({'id': str(athlete.get('id','')), 'game_id': event_id, 'date': fallback_date,
                     'name': athlete.get('displayName') or athlete.get('fullName') or '', 'team': abbr,
                     'minutes': stats.get('min') or stats.get('minutes') or '',
-                    'pts': pts, 'reb': as_number('reb', 'totalrebounds'), 'ast': as_number('ast', 'assists'),
+                    'pts': pts, 'reb': as_number('reb', 'rebounds', 'totalrebounds', 'total_rebounds', 'totalRebounds', 'trb'), 'ast': as_number('ast', 'assists'),
                     'stl': as_number('stl','steals'), 'blk': as_number('blk','blocks'), 'tov': as_number('to','turnovers'),
                     'fgm': fg[0], 'fga': fg[1], 'ftm': ft[0], 'fta': ft[1], 'tpm': th[0]})
     return rows
