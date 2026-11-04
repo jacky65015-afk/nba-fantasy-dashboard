@@ -1,0 +1,10 @@
+{
+  "generated_at": null,
+  "source": "ESPN public endpoints (unofficial; availability not guaranteed)",
+  "season": "2026-27",
+  "warnings": ["尚未執行資料更新。部署後由 GitHub Actions 每四小時更新，或手動執行 update_data.py。"],
+  "games": [],
+  "player_games": [],
+  "injuries": [],
+  "teams": []
+}
