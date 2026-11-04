@@ -136,22 +136,60 @@ def main():
     start, end = today - dt.timedelta(days=14), today + dt.timedelta(days=28)
     ranges = [(start + dt.timedelta(days=i), min(start + dt.timedelta(days=i+6), end)) for i in range(0, (end-start).days+1, 7)]
     def fetch_range(pair):
-        a,b = pair
-        url = BASE + '/scoreboard?' + urllib.parse.urlencode({'dates': f'{a:%Y%m%d}-{b:%Y%m%d}', 'limit': 300})
+        a, b = pair
+        url = BASE + '/scoreboard?' + urllib.parse.urlencode({
+            'dates': f'{a:%Y%m%d}-{b:%Y%m%d}', 'limit': 300
+        })
         return get_json(url)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+
+    def fetch_day(day):
+        # ESPN's single-day query is often more compatible than a date range.
+        url = BASE + '/scoreboard?' + urllib.parse.urlencode({
+            'dates': day.strftime('%Y%m%d'), 'limit': 300
+        })
+        return get_json(url)
+
+    def add_events(payload):
+        for evt in payload.get('events') or []:
+            games.append(parse_event(evt))
+            for co in ((evt.get('competitions') or [{}])[0].get('competitors') or []):
+                t = team_entry(co.get('team') or {})
+                if t['abbr']:
+                    teams_by_abbr[t['abbr']] = t
+
+    failed_ranges = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         tasks = {pool.submit(fetch_range, pair): pair for pair in ranges}
         for future in concurrent.futures.as_completed(tasks):
-            a,b = tasks[future]
+            a, b = tasks[future]
             try:
-                payload = future.result()
-                for evt in payload.get('events') or []:
-                    games.append(parse_event(evt))
-                    for co in ((evt.get('competitions') or [{}])[0].get('competitors') or []):
-                        t = team_entry(co.get('team') or {})
-                        if t['abbr']: teams_by_abbr[t['abbr']] = t
+                add_events(future.result())
             except Exception as exc:
-                warnings.append(f'{a} 至 {b} 賽程抓取失敗：{exc}')
+                failed_ranges.append((a, b))
+                warnings.append(f'{a} 至 {b} 區間賽程抓取失敗：{exc}')
+
+    # Fallback for weeks rejected by ESPN's date-range endpoint.
+    # Check one day first; if blocked too, avoid dozens of useless requests.
+    if failed_ranges:
+        probe = failed_ranges[0][0]
+        try:
+            add_events(fetch_day(probe))
+            print(f'Daily scoreboard probe succeeded: {probe}', flush=True)
+            days = sorted({a + dt.timedelta(days=i)
+                           for a, b in failed_ranges
+                           for i in range((b-a).days + 1)
+                           if a + dt.timedelta(days=i) != probe})
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                tasks = {pool.submit(fetch_day, day): day for day in days}
+                for future in concurrent.futures.as_completed(tasks):
+                    day = tasks[future]
+                    try:
+                        add_events(future.result())
+                    except Exception as exc:
+                        warnings.append(f'{day} 單日賽程抓取失敗：{exc}')
+        except Exception as exc:
+            warnings.append(f'單日賽程備援也失敗（{probe}）：{exc}')
+
     games = list({g['id']: g for g in games if g['id']}.values())
     games.sort(key=lambda r: (r['date'], r['id']))
     if not games and old.get('games'):
@@ -201,9 +239,11 @@ def main():
     temp = OUT.with_suffix('.tmp')
     temp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
     os.replace(temp, OUT)
-    print(f"Updated {OUT}: games={len(games)}, player_games={len(player_games)}, injuries={len(injury_rows)}, warnings={len(warnings)}")
+    print(f"Updated {OUT}: games={len(games)}, player_games={len(player_games)}, injuries={len(injury_rows)}, warnings={len(warnings)}", flush=True)
+    for message in warnings[:45]:
+        print('WARNING:', message, flush=True)
     if not games and not player_games:
-        raise SystemExit('No scoreboard / player results returned; dataset contains warnings.')
+        raise SystemExit('No scoreboard / player results returned. Review WARNING lines above; do not treat empty data as current.')
 
 if __name__ == '__main__':
     main()
