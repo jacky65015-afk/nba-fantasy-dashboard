@@ -67,10 +67,12 @@ def boxscore_players(summary, fallback_date):
                 athlete = item.get('athlete') or {}
                 vals = item.get('stats') or []
                 stats = dict(zip(names, vals))
-                # ESPN may place total rebounds under 'rebounds' or label 'REB'.
-                # Merge matching display labels without overwriting canonical keys.
+                # ESPN uses different keys/labels by boxscore feed/version.
+                # Some feeds expose 'defensiveRebounds' + 'offensiveRebounds'
+                # but not a usable 'rebounds' total. Align labels independently.
                 for k, v in zip(labels, vals):
                     stats.setdefault(k, v)
+                stats = {str(k).lower().replace('_','').replace(' ',''): v for k,v in stats.items()}
                 # ESPN box scores typically expose min, fg, 3pt, ft, reb, ast, stl, blk, to, pf, pts
                 def as_number(*candidates):
                     for k in candidates:
@@ -91,6 +93,13 @@ def boxscore_players(summary, fallback_date):
                 fg = split_shots('fg', 'fieldgoalsmade-fieldgoalsattempted')
                 ft = split_shots('ft', 'freethrowsmade-freethrowsattempted')
                 th = split_shots('3pt', 'threepointfieldgoalsmade-threepointfieldgoalsattempted')
+                # Fall back to offensive + defensive rebounds only when BOTH exist.
+                # Never invent a zero when a field is absent.
+                reb = as_number('reb', 'rebounds', 'totalrebounds', 'trb')
+                ore = as_number('oreb','offensiverebounds','offreb')
+                dre = as_number('dreb','defensiverebounds','defreb')
+                if reb is None and ore is not None and dre is not None:
+                    reb = ore + dre
                 if not vals or item.get('didNotPlay') or item.get('ejected') and not any(str(v).strip() for v in vals):
                     continue
                 pts = as_number('pts', 'points')
@@ -98,9 +107,12 @@ def boxscore_players(summary, fallback_date):
                 rows.append({'id': str(athlete.get('id','')), 'game_id': event_id, 'date': fallback_date,
                     'name': athlete.get('displayName') or athlete.get('fullName') or '', 'team': abbr,
                     'minutes': stats.get('min') or stats.get('minutes') or '',
-                    'pts': pts, 'reb': as_number('reb', 'rebounds', 'totalrebounds', 'total_rebounds', 'totalRebounds', 'trb'), 'ast': as_number('ast', 'assists'),
+                    'pts': pts, 'reb': reb, 'oreb': ore, 'dreb': dre, 'ast': as_number('ast', 'assists'),
                     'stl': as_number('stl','steals'), 'blk': as_number('blk','blocks'), 'tov': as_number('to','turnovers'),
                     'fgm': fg[0], 'fga': fg[1], 'ftm': ft[0], 'fta': ft[1], 'tpm': th[0]})
+    missing_reb = sum(p['reb'] is None for p in rows)
+    if rows and missing_reb:
+        print(f'Boxscore {event_id}: rebounds missing for {missing_reb}/{len(rows)} players; verify ESPN keys.', flush=True)
     return rows
 
 def find_injuries(obj):
