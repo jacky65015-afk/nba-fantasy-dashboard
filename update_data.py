@@ -31,12 +31,18 @@ def get_json(url, retries=2):
 def team_entry(team):
     return {'id': str(team.get('id', '')), 'abbr': team.get('abbreviation') or team.get('shortDisplayName') or '', 'name': team.get('displayName') or team.get('name') or '', 'logo': (team.get('logos') or [{}])[0].get('href', '')}
 
-def eastern_day(value):
-    if not value: return ''
+def taiwan_day(value):
+    """Return Asia/Taipei calendar date from the event's UTC tipoff."""
+    if not value:
+        return ''
     try:
         from zoneinfo import ZoneInfo
-        return dt.datetime.fromisoformat(value.replace('Z','+00:00')).astimezone(ZoneInfo('America/New_York')).date().isoformat()
-    except (ValueError, TypeError):
+        instant = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if instant.tzinfo is None:
+            # An unqualified date is not enough to safely convert time zones.
+            return value[:10]
+        return instant.astimezone(ZoneInfo('Asia/Taipei')).date().isoformat()
+    except (ValueError, TypeError, OverflowError):
         return value[:10]
 
 def parse_event(event):
@@ -46,7 +52,7 @@ def parse_event(event):
     away = next((e for e in competitors if e.get('homeAway') == 'away'), {})
     st = c.get('status') or event.get('status') or {}
     ty = st.get('type') or {}
-    return {'id': str(event.get('id', '')), 'date': eastern_day(event.get('date') or c.get('date') or ''),
+    return {'id': str(event.get('id', '')), 'date': taiwan_day(event.get('date') or c.get('date') or ''),
             'home': (home.get('team') or {}).get('abbreviation', ''), 'away': (away.get('team') or {}).get('abbreviation', ''),
             'home_score': home.get('score'), 'away_score': away.get('score'), 'status': ty.get('name', ''),
             'status_text': ty.get('shortDetail') or st.get('displayClock') or ty.get('description') or '',
@@ -67,12 +73,6 @@ def boxscore_players(summary, fallback_date):
                 athlete = item.get('athlete') or {}
                 vals = item.get('stats') or []
                 stats = dict(zip(names, vals))
-                # ESPN uses different keys/labels by boxscore feed/version.
-                # Some feeds expose 'defensiveRebounds' + 'offensiveRebounds'
-                # but not a usable 'rebounds' total. Align labels independently.
-                for k, v in zip(labels, vals):
-                    stats.setdefault(k, v)
-                stats = {str(k).lower().replace('_','').replace(' ',''): v for k,v in stats.items()}
                 # ESPN box scores typically expose min, fg, 3pt, ft, reb, ast, stl, blk, to, pf, pts
                 def as_number(*candidates):
                     for k in candidates:
@@ -93,13 +93,6 @@ def boxscore_players(summary, fallback_date):
                 fg = split_shots('fg', 'fieldgoalsmade-fieldgoalsattempted')
                 ft = split_shots('ft', 'freethrowsmade-freethrowsattempted')
                 th = split_shots('3pt', 'threepointfieldgoalsmade-threepointfieldgoalsattempted')
-                # Fall back to offensive + defensive rebounds only when BOTH exist.
-                # Never invent a zero when a field is absent.
-                reb = as_number('reb', 'rebounds', 'totalrebounds', 'trb')
-                ore = as_number('oreb','offensiverebounds','offreb')
-                dre = as_number('dreb','defensiverebounds','defreb')
-                if reb is None and ore is not None and dre is not None:
-                    reb = ore + dre
                 if not vals or item.get('didNotPlay') or item.get('ejected') and not any(str(v).strip() for v in vals):
                     continue
                 pts = as_number('pts', 'points')
@@ -107,12 +100,9 @@ def boxscore_players(summary, fallback_date):
                 rows.append({'id': str(athlete.get('id','')), 'game_id': event_id, 'date': fallback_date,
                     'name': athlete.get('displayName') or athlete.get('fullName') or '', 'team': abbr,
                     'minutes': stats.get('min') or stats.get('minutes') or '',
-                    'pts': pts, 'reb': reb, 'oreb': ore, 'dreb': dre, 'ast': as_number('ast', 'assists'),
+                    'pts': pts, 'reb': as_number('reb', 'totalrebounds'), 'ast': as_number('ast', 'assists'),
                     'stl': as_number('stl','steals'), 'blk': as_number('blk','blocks'), 'tov': as_number('to','turnovers'),
                     'fgm': fg[0], 'fga': fg[1], 'ftm': ft[0], 'fta': ft[1], 'tpm': th[0]})
-    missing_reb = sum(p['reb'] is None for p in rows)
-    if rows and missing_reb:
-        print(f'Boxscore {event_id}: rebounds missing for {missing_reb}/{len(rows)} players; verify ESPN keys.', flush=True)
     return rows
 
 def find_injuries(obj):
@@ -139,7 +129,7 @@ def main():
         try: old = json.loads(OUT.read_text(encoding='utf-8'))
         except (ValueError, OSError): pass
     now = dt.datetime.now(dt.timezone.utc)
-    # ESPN scores use US/Eastern calendar dates; use America/New_York if available.
+    # Query ESPN by its US/Eastern scoreboard calendar, but OUTPUT all game dates in Asia/Taipei.
     try:
         from zoneinfo import ZoneInfo
         today = now.astimezone(ZoneInfo('America/New_York')).date()
@@ -213,7 +203,7 @@ def main():
         games = old['games']
     elif not games:
         warnings.append('賽程尚無可用資料，請檢查 ESPN 來源或網路。')
-    # For speed, only request individual box scores for the most recent 7 Eastern dates.
+    # Query a 7-day Eastern window, including games that fall on the following Taiwan day.
     recent = [g for g in games if g.get('completed') and str(today-dt.timedelta(days=6)) <= g['date'] <= str(today)]
     player_games = []
     def fetch_summary(game):
@@ -247,7 +237,7 @@ def main():
     data = {
         'generated_at': now.isoformat(timespec='seconds').replace('+00:00','Z'),
         'source': 'ESPN public site API (unofficial / not guaranteed)',
-        'season': '2026-27', 'warnings': warnings[:45],
+        'season': '2026-27', 'calendar_timezone': 'Asia/Taipei', 'warnings': warnings[:45],
         'games': games, 'player_games': player_games,
         'injuries': injury_rows, 'teams': sorted(teams_by_abbr.values(), key=lambda t: t['abbr'])
     }
