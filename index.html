@@ -97,7 +97,7 @@ function renderPlayers(){
   let rows=dayRows.filter(p=>(playerTeamFilter==='ALL'||p.team===playerTeamFilter)&&(`${p.name} ${p.team}`).toLowerCase().includes(search.toLowerCase()));
   rows.sort((a,b)=>comparePlayer(a,b,playerSort,playerSortDir));
   const sortHeads=playerColumns.map(([key,title])=>{let active=playerSort===key,arrow=active?(playerSortDir==='asc'?' ▲':' ▼'):'';let order=active?(playerSortDir==='asc'?'ascending':'descending'):'none';return `<th class="sort-col" aria-sort="${order}"><button type="button" data-sort="${key}" title="點擊依 ${title} 排序">${title}${arrow}</button></th>`}).join('');
-  $('#content').innerHTML=`<section class="panel"><div class="panel-title"><div><h3>🏀 每日球員 Box Score</h3><p>依台灣日期（UTC+8）歸類 · 預設台灣今天 · 非即時逐球更新</p></div><span class="pill">${rows.length} 筆</span></div><div class="filters"><select id="playerDate" class="select">${dates.length?dates.map(d=>`<option ${d===playerDate?'selected':''} value="${d}">${d}${d===taiwanToday()?'（台灣今天）':''}</option>`).join(''):'<option>尚未取得日期</option>'}</select>${nbaTeamSelect("playerTeamFilter",playerTeamFilter)}<input id="playerSearch" class="field" style="width:min(100%,300px)" placeholder="搜尋球員或 NBA 球隊縮寫" value="${esc(search)}"></div><p class="rank-help"><b>RANK</b>：當日 9CAT 標準化估算排名，數字越小越好，預設由第 1 名排序；非 Yahoo 官方賽季 RANK。以當日已取得球員比較，缺漏數據可能影響結果。點選任一欄標題可切換遞增／遞減，FG%／FT% 使用小數格式（如 .500）並依命中率排序；FG／FT 顯示命中數/出手數（如 5/10），依命中數排序。</p>${rows.length?`<div class="table-wrap"><table><thead><tr>${sortHeads}</tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p._rank}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.team)}</td><td>${esc(p.minutes)}</td>${['pts','reb','ast','tpm','stl','blk','tov'].map(k=>`<td>${formatNum(p[k])}</td>`).join('')}<td>${pctDecimal(p.fgm,p.fga)}</td><td>${shotFraction(p.fgm,p.fga)}</td><td>${pctDecimal(p.ftm,p.fta)}</td><td>${shotFraction(p.ftm,p.fta)}</td></tr>`).join('')}</tbody></table></div>`:empty('這個台灣日期尚無可用的球員數據','日期已使用台灣時間（UTC+8）；資料更新或比賽尚未結束時，可能暫時沒有 Box Score。可選擇前一天查看已取得的成績。')}</section>`;
+  $('#content').innerHTML=`<section class="panel"><div class="panel-title"><div><h3>🏀 每日球員 Box Score</h3><p>依台灣日期（UTC+8）歸類 · 比賽期間約每 15 分鐘更新（GitHub 排程可能延遲，網站每 3 分鐘檢查）</p></div><span class="pill">${rows.length} 筆</span></div><div class="filters"><select id="playerDate" class="select">${dates.length?dates.map(d=>`<option ${d===playerDate?'selected':''} value="${d}">${d}${d===taiwanToday()?'（台灣今天）':''}</option>`).join(''):'<option>尚未取得日期</option>'}</select>${nbaTeamSelect("playerTeamFilter",playerTeamFilter)}<input id="playerSearch" class="field" style="width:min(100%,300px)" placeholder="搜尋球員或 NBA 球隊縮寫" value="${esc(search)}"></div><p class="small">${data.legacy_dates_estimated||dayRows.some(p=>p.date_inferred)?"⚠ 舊資料缺少開賽時間者，日期暫依美國晚間比賽＋1 天推定；待更新程式取得開賽時間後核實。":""} ${dayRows.some(p=>data.games.some(g=>g.id===p.game_id&&!g.completed))?"🔴 本日包含進行中的暫定 Box Score，數據可能變動。":""}</p><p class="rank-help"><b>RANK</b>：當日 9CAT 標準化估算排名，數字越小越好，預設由第 1 名排序；非 Yahoo 官方賽季 RANK。以當日已取得球員比較，缺漏數據可能影響結果。點選任一欄標題可切換遞增／遞減，FG%／FT% 使用小數格式（如 .500）並依命中率排序；FG／FT 顯示命中數/出手數（如 5/10），依命中數排序。</p>${rows.length?`<div class="table-wrap"><table><thead><tr>${sortHeads}</tr></thead><tbody>${rows.map(p=>`<tr><td class="rank">${p._rank}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.team)}</td><td>${esc(p.minutes)}</td>${['pts','reb','ast','tpm','stl','blk','tov'].map(k=>`<td>${formatNum(p[k])}</td>`).join('')}<td>${pctDecimal(p.fgm,p.fga)}</td><td>${shotFraction(p.fgm,p.fga)}</td><td>${pctDecimal(p.ftm,p.fta)}</td><td>${shotFraction(p.ftm,p.fta)}</td></tr>`).join('')}</tbody></table></div>`:empty('這個台灣日期尚無可用的球員數據','日期已使用台灣時間（UTC+8）；資料更新或比賽尚未結束時，可能暫時沒有 Box Score。可選擇前一天查看已取得的成績。')}</section>`;
   $('#playerDate').onchange=e=>{playerDate=e.target.value;render()};
   $('#playerTeamFilter').onchange=e=>{playerTeamFilter=e.target.value;render()};
   $('#playerSearch').oninput=e=>{let pos=e.target.selectionStart;search=e.target.value;render();let el=$('#playerSearch');el.focus();el.setSelectionRange(pos,pos)};
@@ -146,6 +146,41 @@ function renderInjuries(){
 }
 function renderSettings(){let l=currentLeague(),s=getSetting();$('#content').innerHTML=`<section class="panel"><div class="panel-title"><div><h3>⚙ ${esc(l.name)} · 私有設定</h3><p>與其他五支隊伍完全隔離，存在本機瀏覽器</p></div></div><div class="editor"><div><label for="roster">目前持有球員（每行一位，含 IL 可標記）</label><textarea id="roster" class="text-area" placeholder="例：Player A / Player B / Player C">${esc(s.roster||'')}</textarea></div><div><label for="fas">這個聯盟的自由球員觀察名單（FA）</label><textarea id="fas" class="text-area" placeholder="只填這支隊伍所屬聯盟的 FA">${esc(s.fas||'')}</textarea></div></div><div style="margin-top:14px"><label for="strategy" style="display:block;font-size:12px;color:#aac0df;margin-bottom:6px">隊伍策略備註（可覆寫預設）</label><textarea class="text-area" id="strategy">${esc(s.strategy||l.strategy)}</textarea></div><div class="actions" style="margin-top:15px"><button class="button primary" id="save">儲存這支隊伍</button><button class="button" id="export">匯出六隊設定 JSON</button><button class="button" id="import">匯入 JSON</button><input id="importFile" type="file" accept="application/json,.json" class="hidden"></div><p class="small">匯入會合併六隊資料。下載 JSON 自行備份，避免清除瀏覽器資料後遺失。</p></section>`;$('#save').onclick=()=>{saveSettings({roster:$('#roster').value,fas:$('#fas').value,strategy:$('#strategy').value});notice('已儲存 '+l.name+' 的本機設定')};$('#export').onclick=()=>{let blob=new Blob([JSON.stringify({version:1,leagues:custom},null,2)],{type:'application/json'});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='fantasy-six-leagues-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('#import').onclick=()=>$('#importFile').click();$('#importFile').onchange=async e=>{let file=e.target.files?.[0];if(!file)return;try{let obj=JSON.parse(await file.text());if(!obj.leagues||typeof obj.leagues!=='object'||Array.isArray(obj.leagues))throw Error('無法識別的備份格式');custom={...custom,...Object.fromEntries(Object.entries(obj.leagues).filter(([k,v])=>LEAGUES.some(l=>l.id===k)&&v&&typeof v==='object'))};localStorage.setItem(KEY,JSON.stringify(custom));notice('已匯入球隊備份');render()}catch(err){notice('匯入失敗：'+err.message)}}}
 function render(){warning();if(tab==='overview')renderOverview();if(tab==='schedule')renderSchedule();if(tab==='players')renderPlayers();if(tab==='injuries')renderInjuries();if(tab==='settings')renderSettings()}
-let fetchInProgress=false;async function refresh(manual=false){if(fetchInProgress)return;fetchInProgress=true;$('#refresh').disabled=true;try{let res=await fetch('./data/nba.json?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);let obj=await res.json();if(!Array.isArray(obj.games)||!Array.isArray(obj.player_games)||!Array.isArray(obj.injuries)||!Array.isArray(obj.teams))throw Error('資料格式錯誤');data=obj;renderShell();render();if(manual)notice('已檢查網站資料檔；最近更新：'+fmtDT(data.generated_at));}catch(err){if(manual)notice('檢查失敗：'+err.message);$('#warning').innerHTML='<div class="note">⚠ 無法載入 data/nba.json；請使用 http://localhost 或 GitHub Pages 開啟。'+esc(err.message)+'</div>';}finally{fetchInProgress=false;$('#refresh').disabled=false;}}
-$('#refresh').onclick=()=>refresh(true);renderShell();render();refresh();setInterval(()=>refresh(),4*60*60*1000);
+// Normalize every cached date to Taiwan time. For legacy records lacking
+// tipoff timestamps, +1 day is a provisional US-evening-game assumption.
+function gameTaiwanDate(value){
+  if(!value)return '';
+  const instant=new Date(value);
+  if(Number.isNaN(instant.getTime()))return '';
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(instant);
+  const part=k=>parts.find(p=>p.type===k)?.value||'';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+function plusTaiwanDay(value){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return value;
+  const dt=new Date(value+'T00:00:00Z');dt.setUTCDate(dt.getUTCDate()+1);
+  return dt.toISOString().slice(0,10);
+}
+function normalizeTaiwanData(obj){
+  if(obj.date_basis==='tipoff_utc_to_Asia/Taipei')return obj;
+  const byId=new Map();
+  for(const g of obj.games){
+    const fromTipoff=gameTaiwanDate(g.start_time||g.startTime||'');
+    if(fromTipoff)g.date=fromTipoff;
+    else if(g.date){g.date=plusTaiwanDay(g.date);g.date_inferred=true;}
+    if(g.id)byId.set(String(g.id),g);
+  }
+  for(const p of obj.player_games){
+    const g=byId.get(String(p.game_id||''));
+    const accurate=gameTaiwanDate(p.start_time||g?.start_time||'');
+    if(accurate)p.date=accurate;
+    else if(g){p.date=g.date;p.date_inferred=!!g.date_inferred;}
+    else if(p.date){p.date=plusTaiwanDay(p.date);p.date_inferred=true;}
+  }
+  obj.date_basis='tipoff_utc_to_Asia/Taipei';
+  obj.legacy_dates_estimated=true;
+  return obj;
+}
+let fetchInProgress=false;async function refresh(manual=false){if(fetchInProgress)return;fetchInProgress=true;$('#refresh').disabled=true;try{let res=await fetch('./data/nba.json?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);let obj=await res.json();if(!Array.isArray(obj.games)||!Array.isArray(obj.player_games)||!Array.isArray(obj.injuries)||!Array.isArray(obj.teams))throw Error('資料格式錯誤');data=normalizeTaiwanData(obj);renderShell();render();if(manual)notice('已檢查網站資料檔；最近更新：'+fmtDT(data.generated_at));}catch(err){if(manual)notice('檢查失敗：'+err.message);$('#warning').innerHTML='<div class="note">⚠ 無法載入 data/nba.json；請使用 http://localhost 或 GitHub Pages 開啟。'+esc(err.message)+'</div>';}finally{fetchInProgress=false;$('#refresh').disabled=false;}}
+$('#refresh').onclick=()=>refresh(true);renderShell();render();refresh();setInterval(()=>refresh(),3*60*1000);
 </script></body></html>

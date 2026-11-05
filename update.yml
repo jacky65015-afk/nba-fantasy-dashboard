@@ -1,0 +1,49 @@
+name: NBA Fantasy Taiwan data and live updates
+on:
+  schedule:
+    - cron: '13 */4 * * *'   # Full historical/schedule/roster update
+    - cron: '7,22,37,52 * * * *'  # Lightweight live-game refresh (~15 min)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Update mode'
+        type: choice
+        options: [full, live]
+        default: full
+permissions:
+  contents: write
+concurrency:
+  group: nba-fantasy-data-write
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch NBA public data
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          REQUEST_MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "7,22,37,52 * * * *" ]; then
+            python update_data.py --live
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REQUEST_MODE" = "live" ]; then
+            python update_data.py --live
+          else
+            python update_data.py
+          fi
+      - name: Commit data only when changed
+        run: |
+          git config user.name "nba-data-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/nba.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh Taiwan NBA game and boxscore data"
+            git push
+          fi

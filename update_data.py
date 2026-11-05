@@ -2,6 +2,7 @@
 """Best-effort NBA public scoreboard, boxscores, and roster injury snapshot.
 No login keys. ESPN public endpoints are unofficial and may change.
 """
+import argparse
 import concurrent.futures
 import datetime as dt
 import json
@@ -11,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / 'data/nba.json'
@@ -31,17 +33,19 @@ def get_json(url, retries=2):
 def team_entry(team):
     return {'id': str(team.get('id', '')), 'abbr': team.get('abbreviation') or team.get('shortDisplayName') or '', 'name': team.get('displayName') or team.get('name') or '', 'logo': (team.get('logos') or [{}])[0].get('href', '')}
 
+TZ = ZoneInfo('Asia/Taipei')
+ET = ZoneInfo('America/New_York')
+
 def taiwan_day(value):
     """Return Asia/Taipei calendar date from the event's UTC tipoff."""
     if not value:
         return ''
     try:
-        from zoneinfo import ZoneInfo
         instant = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
         if instant.tzinfo is None:
             # An unqualified date is not enough to safely convert time zones.
             return value[:10]
-        return instant.astimezone(ZoneInfo('Asia/Taipei')).date().isoformat()
+        return instant.astimezone(TZ).date().isoformat()
     except (ValueError, TypeError, OverflowError):
         return value[:10]
 
@@ -52,7 +56,8 @@ def parse_event(event):
     away = next((e for e in competitors if e.get('homeAway') == 'away'), {})
     st = c.get('status') or event.get('status') or {}
     ty = st.get('type') or {}
-    return {'id': str(event.get('id', '')), 'date': taiwan_day(event.get('date') or c.get('date') or ''),
+    tipoff = event.get('date') or c.get('date') or ''
+    return {'id': str(event.get('id', '')), 'date': taiwan_day(tipoff), 'start_time': tipoff,
             'home': (home.get('team') or {}).get('abbreviation', ''), 'away': (away.get('team') or {}).get('abbreviation', ''),
             'home_score': home.get('score'), 'away_score': away.get('score'), 'status': ty.get('name', ''),
             'status_text': ty.get('shortDetail') or st.get('displayClock') or ty.get('description') or '',
@@ -123,16 +128,159 @@ def find_injuries(obj):
                          'status': str(status), 'detail': str(desc), 'date': inj.get('date') or ''})
     return rows
 
-def main():
+def normalize_existing(old):
+    """Use actual tipoff time; mark old untimed US calendar dates as inferred.
+
+    Existing historical records lacking timestamps are provisionally shifted
+    to the next Taiwan date, matching most US evening NBA games. Early US
+    games can fall on the same Taiwan date. Later scoreboard refreshes fix
+    those entries when the true UTC start time becomes available.
+    """
+    legacy_us_dates = not old.get('date_basis')
+    by_id = {}
+    for g in old.get('games') or []:
+        if not isinstance(g, dict):
+            continue
+        if g.get('start_time'):
+            g['date'] = taiwan_day(g['start_time'])
+            g.pop('date_inferred', None)
+        elif legacy_us_dates and g.get('date'):
+            try:
+                g['date'] = (dt.date.fromisoformat(g['date']) + dt.timedelta(days=1)).isoformat()
+                g['date_inferred'] = True
+            except ValueError:
+                pass
+        if g.get('id'):
+            by_id[str(g['id'])] = g
+    for p in old.get('player_games') or []:
+        if not isinstance(p, dict):
+            continue
+        g = by_id.get(str(p.get('game_id', '')))
+        if p.get('start_time'):
+            p['date'] = taiwan_day(p['start_time'])
+            p.pop('date_inferred', None)
+        elif g:
+            p['date'] = g['date']
+            if g.get('start_time'):
+                p['start_time'] = g['start_time']
+                p.pop('date_inferred', None)
+            elif g.get('date_inferred'):
+                p['date_inferred'] = True
+        elif legacy_us_dates and p.get('date'):
+            try:
+                p['date'] = (dt.date.fromisoformat(p['date']) + dt.timedelta(days=1)).isoformat()
+                p['date_inferred'] = True
+            except ValueError:
+                pass
+    return old
+
+
+def merge_boxscores(old_rows, new_rows, refreshed_games):
+    """Replace complete game snapshots to avoid retaining stale in-game stats."""
+    updated = set(refreshed_games)
+    combined = [p for p in old_rows if str(p.get('game_id','')) not in updated]
+    combined.extend(new_rows)
+    return combined
+
+
+def write_if_changed(payload, previous):
+    # Keep the timestamp stable when the payload did not actually change.
+    comparable = dict(payload)
+    comparable.pop('generated_at', None)
+    old_comparable = dict(previous)
+    old_comparable.pop('generated_at', None)
+    if previous and comparable == old_comparable:
+        print('Data unchanged; no commit required.', flush=True)
+        return
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    temp = OUT.with_suffix('.tmp')
+    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    os.replace(temp, OUT)
+
+
+def live_update(old):
+    """Fetch only recent Eastern calendar days; includes live games.
+
+    ESPN's public endpoints are unofficial and can fail or return partial stats.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    eastern = now.astimezone(ET).date()
+    previous = json.loads(json.dumps(old))
+    old = normalize_existing(old)
+    days = [eastern - dt.timedelta(days=1), eastern, eastern + dt.timedelta(days=1)]
+    seen = {}
+    warnings = []
+    successful_days = 0
+    for day in days:
+        url = BASE + '/scoreboard?' + urllib.parse.urlencode({
+            'dates': day.strftime('%Y%m%d'), 'limit': 300
+        })
+        try:
+            result = get_json(url, retries=1)
+            successful_days += 1
+            for event in result.get('events') or []:
+                item = parse_event(event)
+                if item.get('id') and item.get('start_time'):
+                    seen[item['id']] = item
+        except Exception as exc:
+            warnings.append(f'{day} 賽程讀取失敗：{exc}')
+
+    if not successful_days:
+        print('WARNING: Live source unavailable; preserving last good data.', flush=True)
+        return
+
+    previous_games = {str(g.get('id')):g for g in old.get('games') or [] if g.get('id')}
+    previous_games.update(seen)
+    games = sorted(previous_games.values(), key=lambda g:(g.get('date',''),g.get('id','')))
+    # Live games and newly completed games may have provisional player stats.
+    eligible = [g for g in seen.values() if (g.get('status') not in ('STATUS_SCHEDULED','STATUS_POSTPONED','STATUS_CANCELED'))]
+    fresh_rows = []
+    successful_ids = set()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(get_json, BASE + '/summary?' + urllib.parse.urlencode({'event':g['id']}), 1):g for g in eligible}
+        for future in concurrent.futures.as_completed(futures):
+            g = futures[future]
+            try:
+                obj = future.result()
+                new_rows = boxscore_players(obj, g['date'])
+                if new_rows:
+                    for p in new_rows: p['start_time'] = g['start_time']
+                    fresh_rows.extend(new_rows)
+                    successful_ids.add(g['id'])
+            except Exception as exc:
+                warnings.append(f"{g['id']} 逐場 Box Score 讀取失敗：{exc}")
+
+    rows = merge_boxscores(old.get('player_games') or [], fresh_rows, successful_ids)
+    # Any preserved record with start_time should always use its genuine Taiwan date.
+    for p in rows:
+        if p.get('start_time'):
+            p['date'] = taiwan_day(p['start_time'])
+    payload = {
+        **old,
+        'source': 'ESPN public site API (unofficial / not guaranteed)',
+        'calendar_timezone': 'Asia/Taipei',
+        'date_basis': 'tipoff_utc_to_Asia/Taipei',
+        'generated_at': now.isoformat(timespec='seconds').replace('+00:00','Z'),
+        'games': games,
+        'player_games': rows,
+        'warnings': (warnings + [w for w in old.get('warnings') or [] if '即時' not in w])[:45]
+    }
+    write_if_changed(payload, previous)
+    print(f'Live checked: games={len(seen)}, refreshed={len(successful_ids)}, boxscore_rows={len(rows)}', flush=True)
+
+def main(live=False):
     old = {}
     if OUT.exists():
         try: old = json.loads(OUT.read_text(encoding='utf-8'))
         except (ValueError, OSError): pass
+    if live:
+        return live_update(old)
+    previous = json.loads(json.dumps(old))
+    old = normalize_existing(old)
     now = dt.datetime.now(dt.timezone.utc)
     # Query ESPN by its US/Eastern scoreboard calendar, but OUTPUT all game dates in Asia/Taipei.
     try:
-        from zoneinfo import ZoneInfo
-        today = now.astimezone(ZoneInfo('America/New_York')).date()
+        today = now.astimezone(ET).date()
     except Exception:
         today = now.date()
     warnings = []
@@ -203,12 +351,16 @@ def main():
         games = old['games']
     elif not games:
         warnings.append('賽程尚無可用資料，請檢查 ESPN 來源或網路。')
-    # Query a 7-day Eastern window, including games that fall on the following Taiwan day.
-    recent = [g for g in games if g.get('completed') and str(today-dt.timedelta(days=6)) <= g['date'] <= str(today)]
+    # Select recent Taiwan dates, not Eastern dates, and include active games.
+    today_taiwan = now.astimezone(TZ).date()
+    recent = [g for g in games if (g.get('completed') or g.get('status') in ('STATUS_IN_PROGRESS','STATUS_HALFTIME'))
+              and str(today_taiwan-dt.timedelta(days=7)) <= g['date'] <= str(today_taiwan)]
     player_games = []
     def fetch_summary(game):
         obj = get_json(BASE + '/summary?' + urllib.parse.urlencode({'event': game['id']}), retries=1)
-        return boxscore_players(obj, game['date'])
+        rows = boxscore_players(obj, game['date'])
+        for p in rows: p['start_time'] = game.get('start_time','')
+        return rows
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
         tasks = {pool.submit(fetch_summary, g): g for g in recent}
         for future in concurrent.futures.as_completed(tasks):
@@ -218,6 +370,11 @@ def main():
     if not player_games and old.get('player_games'):
         warnings.append('球員數據來源無可用結果，暫存上次擷取數據（可能過期）。')
         player_games = old['player_games']
+    else:
+        new_game_ids = {str(p.get('game_id')) for p in player_games if p.get('game_id')}
+        old_keep = [p for p in old.get('player_games') or [] if str(p.get('game_id')) not in new_game_ids
+                    and p.get('date','') >= str(today_taiwan - dt.timedelta(days=8))]
+        player_games = old_keep + player_games
     # Fetch public team rosters. Injury details frequently unavailable here; omit if missing.
     injury_rows = []
     team_list = list(teams_by_abbr.values())
@@ -237,14 +394,11 @@ def main():
     data = {
         'generated_at': now.isoformat(timespec='seconds').replace('+00:00','Z'),
         'source': 'ESPN public site API (unofficial / not guaranteed)',
-        'season': '2026-27', 'calendar_timezone': 'Asia/Taipei', 'warnings': warnings[:45],
+        'season': '2026-27', 'calendar_timezone': 'Asia/Taipei', 'date_basis': 'tipoff_utc_to_Asia/Taipei', 'warnings': warnings[:45],
         'games': games, 'player_games': player_games,
         'injuries': injury_rows, 'teams': sorted(teams_by_abbr.values(), key=lambda t: t['abbr'])
     }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    temp = OUT.with_suffix('.tmp')
-    temp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-    os.replace(temp, OUT)
+    write_if_changed(data, previous)
     print(f"Updated {OUT}: games={len(games)}, player_games={len(player_games)}, injuries={len(injury_rows)}, warnings={len(warnings)}", flush=True)
     for message in warnings[:45]:
         print('WARNING:', message, flush=True)
@@ -252,4 +406,7 @@ def main():
         raise SystemExit('No scoreboard / player results returned. Review WARNING lines above; do not treat empty data as current.')
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--live', action='store_true', help='Only refresh recent game and live boxscore data')
+    args = parser.parse_args()
+    main(live=args.live)
