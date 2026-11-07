@@ -1,15 +1,13 @@
-name: NBA Fantasy - Update Every 4 Hours
+name: NBA Fantasy - Taiwan Time and Live Data
 
 on:
   schedule:
-    # Every four hours, refresh the full dataset (UTC cron).
     - cron: '13 */4 * * *'
-    # Refresh active/recent games approximately every 15 minutes.
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Update mode: full or live'
+        description: 'Full or live update'
         required: true
         default: full
         type: choice
@@ -20,41 +18,34 @@ on:
 permissions:
   contents: write
 
-# Prevent this workflow's scheduled and manual runs from competing to push.
 concurrency:
-  group: nba-fantasy-data-write
+  group: nba-fantasy-data-update
   cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install requests
-
-      - name: Update NBA data
+      - name: Fetch NBA data
         env:
           EVENT_NAME: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
           REQUEST_MODE: ${{ inputs.mode }}
         shell: bash
         run: |
+          set -euo pipefail
           if [[ "$EVENT_NAME" == "schedule" && "$SCHEDULE" == "7,22,37,52 * * * *" ]]; then
             python update_data.py --live
           elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$REQUEST_MODE" == "live" ]]; then
@@ -69,27 +60,21 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add data/
-
+          git add data/nba.json
           if git diff --cached --quiet; then
-            echo 'No data changes to commit.'
+            echo 'No data changes.'
             exit 0
           fi
-
           git commit -m 'Auto-update NBA data'
-
-          # Rebase onto new commits if the branch changed during this run.
-          # Retry when another writer pushes between fetch and push.
           for attempt in 1 2 3; do
             git fetch origin main
             git rebase origin/main
             if git push origin HEAD:main; then
-              echo 'NBA data updated and pushed successfully.'
+              echo 'Updated NBA data pushed successfully.'
               exit 0
             fi
-            echo "Push attempt ${attempt} was rejected; retrying after refetch."
-            sleep 2
+            echo "Push rejected on attempt ${attempt}; retrying."
+            sleep 3
           done
-
-          echo 'Push failed after 3 attempts. See logs for a branch conflict.' >&2
+          echo 'Push failed after three attempts.' >&2
           exit 1
