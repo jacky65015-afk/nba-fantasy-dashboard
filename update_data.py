@@ -74,6 +74,11 @@ def boxscore_players(summary, fallback_date):
         for section in team_blob.get('statistics') or []:
             keys = [str(k).lower() for k in section.get('keys') or []]
             labels = [str(k).lower() for k in section.get('labels') or []]
+            # Safe diagnostic: headers only, never players, access tokens or raw responses.
+            if not getattr(boxscore_players, '_headers_logged', False) and section.get('athletes'):
+                print('ESPN_STAT_HEADERS keys=' + json.dumps(keys, ensure_ascii=False) +
+                      ' labels=' + json.dumps(labels, ensure_ascii=False), flush=True)
+                boxscore_players._headers_logged = True
             # ESPN uses both abbreviated and long-form keys across versions.
             # Normalize punctuation and support either keys or labels.
             def normalized(key):
@@ -103,13 +108,38 @@ def boxscore_players(summary, fallback_date):
                             except (ValueError, TypeError): pass
                     return [None, None]
                 def rebound_total():
-                    total = as_number('reb', 'rebounds', 'totalrebounds', 'totalrebs', 'trb')
+                    # ESPN can label totals as REB, TOT, TREB or use long-form keys.
+                    # Do not replace missing rebounds with zero: zero is a real statistic.
+                    total = as_number(
+                        'reb', 'rebs', 'rebounds', 'totalrebounds',
+                        'totalrebs', 'totalreb', 'trb', 'treb',
+                        'total', 'tot', 'totalboards'
+                    )
                     if total is not None:
                         return total
-                    offense = as_number('oreb', 'offensiverebounds', 'offrebounds')
-                    defense = as_number('dreb', 'defensiverebounds', 'defrebounds')
+                    offense = as_number(
+                        'oreb', 'orebs', 'or', 'offreb', 'offrebs',
+                        'offensiverebounds', 'offensiverebound', 'offrebounds'
+                    )
+                    defense = as_number(
+                        'dreb', 'drebs', 'dr', 'defreb', 'defrebs',
+                        'defensiverebounds', 'defensiverebound', 'defrebounds'
+                    )
                     if offense is not None and defense is not None:
                         return offense + defense
+                    # Some ESPN boxscores use an alternate heading immediately
+                    # before AST. Only use it when its heading explicitly looks
+                    # like a rebound total; never guess a statistic from position.
+                    for headings in (keys, labels):
+                        for idx, heading in enumerate(headings):
+                            h = normalized(heading)
+                            if ('rebound' in h or h.endswith('reb') or h in ('total', 'tot', 'trb', 'treb')) \
+                                    and not h.startswith(('off', 'def', 'o', 'd')) \
+                                    and idx < len(vals):
+                                try:
+                                    return float(str(vals[idx]).replace(',', ''))
+                                except (TypeError, ValueError):
+                                    continue
                     return None
                 fg = split_shots('fg', 'fieldgoalsmade-fieldgoalsattempted')
                 ft = split_shots('ft', 'freethrowsmade-freethrowsattempted')
@@ -274,7 +304,7 @@ def live_update(old):
 
     rows = merge_boxscores(old.get('player_games') or [], fresh_rows, successful_ids)
     if fresh_rows and not any(p.get('reb') is not None for p in fresh_rows):
-        warnings.append('本次即時 Box Score 未取得任何籃板值，REB 可能缺漏；請檢查 ESPN 欄位格式。')
+        warnings.append('本次即時 Box Score 全部 REB 缺漏。請查看 GitHub Actions 的 ESPN_STAT_HEADERS 紀錄。')
     # Any preserved record with start_time should always use its genuine Taiwan date.
     for p in rows:
         if p.get('start_time'):
@@ -407,7 +437,7 @@ def main(live=False):
         if p.get('reb') is None and previous_row and previous_row.get('reb') is not None:
             p['reb'] = previous_row['reb']
     if player_games and not any(p.get('reb') is not None for p in player_games):
-        warnings.append('本次 Box Score 未取得任何籃板值，REB 可能缺漏；請檢查 ESPN 欄位格式。')
+        warnings.append('本次 Box Score 全部 REB 缺漏。請查看 GitHub Actions 的 ESPN_STAT_HEADERS 紀錄。')
     # Fetch public team rosters. Injury details frequently unavailable here; omit if missing.
     injury_rows = []
     team_list = list(teams_by_abbr.values())
