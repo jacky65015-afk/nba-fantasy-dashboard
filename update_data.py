@@ -7,6 +7,7 @@ import concurrent.futures
 import datetime as dt
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -73,28 +74,43 @@ def boxscore_players(summary, fallback_date):
         for section in team_blob.get('statistics') or []:
             keys = [str(k).lower() for k in section.get('keys') or []]
             labels = [str(k).lower() for k in section.get('labels') or []]
-            names = keys if keys else labels
+            # ESPN uses both abbreviated and long-form keys across versions.
+            # Normalize punctuation and support either keys or labels.
+            def normalized(key):
+                return re.sub(r'[^a-z0-9]', '', str(key).lower())
             for item in section.get('athletes') or []:
                 athlete = item.get('athlete') or {}
                 vals = item.get('stats') or []
-                stats = dict(zip(names, vals))
+                stats = {}
+                for headings in (labels, keys):
+                    for heading, value in zip(headings, vals):
+                        stats[normalized(heading)] = value
                 # ESPN box scores typically expose min, fg, 3pt, ft, reb, ast, stl, blk, to, pf, pts
                 def as_number(*candidates):
                     for k in candidates:
-                        v = stats.get(k)
+                        v = stats.get(normalized(k))
                         if v is None: continue
                         try: return float(str(v).replace(',', ''))
                         except (ValueError, TypeError): pass
                     return None
                 def split_shots(*candidates):
                     for k in candidates:
-                        v = stats.get(k)
+                        v = stats.get(normalized(k))
                         if isinstance(v, str) and '-' in v:
                             try:
                                 a,b = v.split('-', 1)
                                 return [int(a), int(b)]
                             except (ValueError, TypeError): pass
                     return [None, None]
+                def rebound_total():
+                    total = as_number('reb', 'rebounds', 'totalrebounds', 'totalrebs', 'trb')
+                    if total is not None:
+                        return total
+                    offense = as_number('oreb', 'offensiverebounds', 'offrebounds')
+                    defense = as_number('dreb', 'defensiverebounds', 'defrebounds')
+                    if offense is not None and defense is not None:
+                        return offense + defense
+                    return None
                 fg = split_shots('fg', 'fieldgoalsmade-fieldgoalsattempted')
                 ft = split_shots('ft', 'freethrowsmade-freethrowsattempted')
                 th = split_shots('3pt', 'threepointfieldgoalsmade-threepointfieldgoalsattempted')
@@ -105,7 +121,7 @@ def boxscore_players(summary, fallback_date):
                 rows.append({'id': str(athlete.get('id','')), 'game_id': event_id, 'date': fallback_date,
                     'name': athlete.get('displayName') or athlete.get('fullName') or '', 'team': abbr,
                     'minutes': stats.get('min') or stats.get('minutes') or '',
-                    'pts': pts, 'reb': as_number('reb', 'totalrebounds'), 'ast': as_number('ast', 'assists'),
+                    'pts': pts, 'reb': rebound_total(), 'ast': as_number('ast', 'assists'),
                     'stl': as_number('stl','steals'), 'blk': as_number('blk','blocks'), 'tov': as_number('to','turnovers'),
                     'fgm': fg[0], 'fga': fg[1], 'ftm': ft[0], 'fta': ft[1], 'tpm': th[0]})
     return rows
@@ -179,7 +195,13 @@ def merge_boxscores(old_rows, new_rows, refreshed_games):
     """Replace complete game snapshots to avoid retaining stale in-game stats."""
     updated = set(refreshed_games)
     combined = [p for p in old_rows if str(p.get('game_id','')) not in updated]
-    combined.extend(new_rows)
+    previous_by_id = {(str(p.get('game_id','')), str(p.get('id',''))): p
+                      for p in old_rows if p.get('game_id') and p.get('id')}
+    for p in new_rows:
+        old = previous_by_id.get((str(p.get('game_id','')), str(p.get('id',''))))
+        if p.get('reb') is None and old is not None and old.get('reb') is not None:
+            p['reb'] = old['reb']
+        combined.append(p)
     return combined
 
 
@@ -251,6 +273,8 @@ def live_update(old):
                 warnings.append(f"{g['id']} 逐場 Box Score 讀取失敗：{exc}")
 
     rows = merge_boxscores(old.get('player_games') or [], fresh_rows, successful_ids)
+    if fresh_rows and not any(p.get('reb') is not None for p in fresh_rows):
+        warnings.append('本次即時 Box Score 未取得任何籃板值，REB 可能缺漏；請檢查 ESPN 欄位格式。')
     # Any preserved record with start_time should always use its genuine Taiwan date.
     for p in rows:
         if p.get('start_time'):
@@ -375,6 +399,15 @@ def main(live=False):
         old_keep = [p for p in old.get('player_games') or [] if str(p.get('game_id')) not in new_game_ids
                     and p.get('date','') >= str(today_taiwan - dt.timedelta(days=8))]
         player_games = old_keep + player_games
+    # Preserve the last known rebound when ESPN sends partial in-game values.
+    older_by_id = {(str(p.get('game_id','')), str(p.get('id',''))): p
+                   for p in old.get('player_games') or [] if p.get('game_id') and p.get('id')}
+    for p in player_games:
+        previous_row = older_by_id.get((str(p.get('game_id','')), str(p.get('id',''))))
+        if p.get('reb') is None and previous_row and previous_row.get('reb') is not None:
+            p['reb'] = previous_row['reb']
+    if player_games and not any(p.get('reb') is not None for p in player_games):
+        warnings.append('本次 Box Score 未取得任何籃板值，REB 可能缺漏；請檢查 ESPN 欄位格式。')
     # Fetch public team rosters. Injury details frequently unavailable here; omit if missing.
     injury_rows = []
     team_list = list(teams_by_abbr.values())
