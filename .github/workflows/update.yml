@@ -1,51 +1,83 @@
-
-name: NBA Fantasy - Update Every 4 Hours
+name: NBA Fantasy - Taiwan Data Updates
 
 on:
   schedule:
-    # 台灣時間 00:13、04:13、08:13、12:13、16:13、20:13
-    - cron: '13 0,4,8,12,16,20 * * *'
-      timezone: 'Asia/Taipei'
+    - cron: '13 */4 * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Data update mode'
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - live
 
 permissions:
   contents: write
 
 concurrency:
-  group: nba-fantasy-update
+  group: nba-fantasy-data-updates
   cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
-        
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+        run: python -m pip install requests
 
       - name: Update NBA data
-        run: python update_data.py
-
-       - name: Commit updated data
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          REQUEST_MODE: ${{ inputs.mode }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          if ! git diff --cached --quiet; then
-            git commit -m "Auto-update NBA data"
-            git pull --rebase origin main
-            git push origin HEAD:main
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "schedule" && "$SCHEDULE" == "7,22,37,52 * * * *" ]]; then
+            python update_data.py --live
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$REQUEST_MODE" == "live" ]]; then
+            python update_data.py --live
           else
-            echo "No data changes"
+            python update_data.py
           fi
+
+      - name: Commit updated NBA data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/nba.json
+          if git diff --cached --quiet; then
+            echo 'No NBA data changes.'
+            exit 0
+          fi
+          git commit -m 'Auto-update NBA data'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo 'NBA data pushed successfully.'
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed. Retrying."
+            sleep 3
+          done
+          echo 'Unable to push after three attempts.' >&2
+          exit 1
