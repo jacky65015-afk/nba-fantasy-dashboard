@@ -1,47 +1,337 @@
 #!/usr/bin/env python3
-"""Non-destructive installer for Fantasy opponent history features.
+'''One-file upgrade for NBA Fantasy 六隊作戰中心.
 
-Run in a checkout of jacky65015-afk/nba-fantasy-dashboard.
-Only inserts a link and fixes rejected ESPN multi-day scoreboards;
-never replaces existing dashboard with an outdated index.html.
-"""
+Upload this file to the repository root as ``upgrade_dashboard.py`` (replace the
+existing file), then run the existing GitHub Actions workflow:
+
+    NBA Fantasy - Player Opponent History
+
+The script is intentionally non-destructive. It patches the current site in
+place and refuses unsafe replacements when expected anchors are missing.
+
+Features installed:
+1. Player box-score rows get a direct "📈 對戰" link.
+2. The opponent page accepts ?player=...&opponent=...&league=... deep links.
+3. Opponent analysis adds recent minutes, DD rate and a conservative START/BN
+   helper. Shark Roto uses an 82-game-cap-aware heuristic: recent role/minutes
+   are more important than historical matchup.
+4. The opponent-history workflow is fixed so opponents.html and the workflow
+   itself are included in future commits.
+5. Existing ESPN daily scoreboard safety patch and README notes are preserved.
+
+No Yahoo login, private roster API, or invented historical records are added.
+'''
+from __future__ import annotations
+
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
 
-def patch_index():
-    path = ROOT / 'index.html'
-    html = path.read_text(encoding='utf-8')
-    if 'href="./opponents.html"' in html:
-        print('index.html: history navigation already installed')
-        return False
-    needle = '<button class="tab" data-tab="players">🏀 球員數據</button>'
-    if needle not in html:
-        raise RuntimeError('index.html: player tab anchor missing, refusing to overwrite existing UI')
-    link = '<a class="tab" href="./opponents.html" title="每位球員對各隊的歷史 9CAT 平均">📈 對手數據</a>'
-    html = html.replace(needle, needle + link, 1)
-    style = '\n.tabs a.tab{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}\n'
-    if '.tabs a.tab' not in html:
-        html = html.replace('</style>', style + '</style>', 1)
-    path.write_text(html, encoding='utf-8')
-    print('index.html: added Opponent Analysis tab, preserving all existing tabs and league settings')
-    return True
+def replace_once(text: str, old: str, new: str, label: str) -> tuple[str, bool]:
+    if new in text:
+        return text, False
+    if old not in text:
+        raise RuntimeError(f"{label}: expected anchor missing; refusing unsafe replacement")
+    return text.replace(old, new, 1), True
 
 
-def patch_updater():
-    path = ROOT / 'update_data.py'
-    src = path.read_text(encoding='utf-8')
-    if 'failed_days = set()' in src and 'fetch_range(' not in src:
-        print('update_data.py: daily scoreboard fix already installed')
+def patch_index() -> bool:
+    path = ROOT / "index.html"
+    html = path.read_text(encoding="utf-8")
+    changed = False
+
+    if 'href="./opponents.html"' not in html:
+        needle = '<button class="tab" data-tab="players">🏀 球員數據</button>'
+        link = (
+            '<a class="tab" href="./opponents.html" '
+            'title="每位球員對各隊的歷史 9CAT 平均">📈 對手數據</a>'
+        )
+        html, did = replace_once(
+            html, needle, needle + link, "index.html opponent navigation"
+        )
+        changed |= did
+
+    if ".tabs a.tab" not in html:
+        html = html.replace(
+            "</style>",
+            "\n.tabs a.tab{text-decoration:none;display:inline-flex;"
+            "align-items:center;justify-content:center}\n</style>",
+            1,
+        )
+        changed = True
+
+    if "function matchupHref(p)" not in html:
+        anchor = (
+            "const playerColumns=[['rank','RANK'],['name','球員'],['team','隊'],"
+            "['minutes','MIN'],['pts','PTS'],['reb','REB'],['ast','AST'],"
+            "['tpm','3PM'],['stl','STL'],['blk','BLK'],['tov','TO'],"
+            "['fg','FG%'],['fgshots','FG'],['ft','FT%'],['ftshots','FT']];"
+        )
+        helper = r'''
+function playerOpponent(p){
+  const g=data.games.find(g=>String(g.id)===String(p.game_id));
+  if(!g)return '';
+  return p.team===g.home?g.away:p.team===g.away?g.home:'';
+}
+function matchupHref(p){
+  const q=new URLSearchParams();
+  q.set('player',p.name||'');
+  q.set('league',leagueId);
+  const opp=playerOpponent(p);if(opp)q.set('opponent',opp);
+  return './opponents.html?'+q.toString();
+}
+'''
+        if anchor not in html:
+            raise RuntimeError(
+                "index.html playerColumns anchor missing; refusing to patch player links"
+            )
+        html = html.replace(anchor, anchor + helper, 1)
+        changed = True
+
+    old_cell = (
+        '<td><strong>${esc(p.name)}</strong><div class="small">台灣 '
+        '${esc(tipoffTaiwan(p.start_time))}</div></td>'
+    )
+    new_cell = (
+        '<td><strong>${esc(p.name)}</strong><div class="small">台灣 '
+        '${esc(tipoffTaiwan(p.start_time))} · '
+        '<a href="${esc(matchupHref(p))}" '
+        'title="查看歷史對戰、近期分鐘、DD 與 START/BN 輔助">📈 對戰</a>'
+        '</div></td>'
+    )
+    if new_cell not in html:
+        if old_cell not in html:
+            raise RuntimeError(
+                "index.html player row anchor missing; refusing to rewrite player table"
+            )
+        html = html.replace(old_cell, new_cell, 1)
+        changed = True
+
+    if changed:
+        path.write_text(html, encoding="utf-8")
+        print("index.html: installed player → matchup deep links")
+    else:
+        print("index.html: matchup links already installed")
+    return changed
+
+
+def patch_opponents() -> bool:
+    path = ROOT / "opponents.html"
+    if not path.exists():
+        raise RuntimeError(
+            "opponents.html is missing. Run the existing opponent-history installer first."
+        )
+    html = path.read_text(encoding="utf-8")
+    changed = False
+
+    if ".decision-grid{" not in html:
+        css = r'''
+.decision-grid{display:grid;grid-template-columns:1.2fr repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.decision-main{border:1px solid #355271;background:#0e1e33;border-radius:12px;padding:14px}
+.decision-main strong{display:block;font-size:24px;margin:3px 0 5px}
+.decision-item{border:1px solid var(--edge);background:#122139;border-radius:12px;padding:12px}
+.decision-item small{display:block;color:#9eb7d6;margin-bottom:5px}
+.decision-item b{font-size:17px}
+.decision-note{margin-top:10px;color:#a9c0dc;font-size:12px;line-height:1.55}
+.start{color:#7af2c7}.lean{color:#8fc6ff}.bench{color:#ffd27f}.danger{color:#ff9e9e}
+@media(max-width:900px){.decision-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.decision-main{grid-column:span 2}}
+'''
+        html = html.replace("</style>", css + "\n</style>", 1)
+        changed = True
+
+    panel_anchor = (
+        '  <section class="stats" id="summary" aria-label="球員統計摘要"></section>'
+    )
+    decision_panel = r'''  <section class="panel" id="decisionPanel">
+    <div class="heading"><div><h2>🎯 START / BN 輔助</h2><div class="small" id="decisionSubtitle">以近期角色、分鐘、DD 與所選對手歷史輔助判斷</div></div><span class="pill" id="leagueBadge">通用模式</span></div>
+    <div id="decisionBody" class="decision-grid"></div>
+    <div class="decision-note">這是 Fantasy 輔助，不是傷病或先發名單的即時確認。Shark Roto 會特別考慮 82 場上限：近期分鐘過低時，即使歷史對位漂亮也會偏向 BN。</div>
+  </section>'''
+    if 'id="decisionPanel"' not in html:
+        if panel_anchor not in html:
+            raise RuntimeError(
+                "opponents.html summary anchor missing; refusing to insert decision panel"
+            )
+        html = html.replace(panel_anchor, panel_anchor + "\n" + decision_panel, 1)
+        changed = True
+
+    base_state = (
+        "let manifest=[],archive=null,available=[],chosenId='',joined=[],visibleGames=[],"
+        "sortKey='gp',sortDesc=true,sourceMode='history';"
+    )
+    enhanced_state = base_state + r'''
+const query=new URLSearchParams(location.search);
+const requestedPlayer=(query.get('player')||'').trim();
+const requestedOpponent=abbr((query.get('opponent')||'').trim());
+const requestedLeague=(query.get('league')||'').trim().toLowerCase();
+'''
+    if "const requestedPlayer=" not in html:
+        if base_state not in html:
+            raise RuntimeError(
+                "opponents.html state anchor missing; refusing to install deep-link parsing"
+            )
+        html = html.replace(base_state, enhanced_state, 1)
+        changed = True
+
+    if "function renderDecision()" not in html:
+        anchor = "function aggregate(rows){"
+        helper = r'''
+function minuteValue(value){
+ const s=String(value??'').trim();
+ if(!s)return null;
+ if(/^\d+:\d+$/.test(s)){const [m,sec]=s.split(':').map(Number);return m+sec/60}
+ const n=Number(s);return Number.isFinite(n)?n:null;
+}
+function isDoubleDouble(r){
+ const cats=['pts','reb','ast','stl','blk'].map(k=>num(r[k])??0);
+ return cats.filter(v=>v>=10).length>=2;
+}
+function avg(values){
+ const xs=values.filter(v=>v!==null&&Number.isFinite(v));
+ return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+}
+function recentRowsForPlayer(limit=5){
+ return joined
+  .filter(p=>String(p.id||p.name)===chosenId)
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.game_id).localeCompare(String(a.game_id)))
+  .slice(0,limit);
+}
+function selectedOpponentRows(){
+ const opp=$('#opponent').value;
+ if(!opp||opp==='ALL')return [];
+ return joined
+  .filter(p=>String(p.id||p.name)===chosenId&&p.opponent===opp)
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.game_id).localeCompare(String(a.game_id)));
+}
+function decisionLabel(recent,oppRows){
+ const mins=recent.map(r=>minuteValue(r.minutes));
+ const avgMin=avg(mins);
+ const latest=mins[0];
+ const recentDD=recent.filter(isDoubleDouble).length;
+ const oppAgg=oppRows.length?aggregate(oppRows):null;
+ let score=0;
+ if(avgMin!==null){
+   if(avgMin>=28)score+=4;
+   else if(avgMin>=25)score+=3;
+   else if(avgMin>=22)score+=2;
+   else if(avgMin>=19)score+=0;
+   else score-=3;
+ }
+ if(latest!==null){
+   if(latest>=28)score+=1;
+   else if(latest<18)score-=2;
+ }
+ if(recentDD>=2)score+=2;else if(recentDD===1)score+=1;
+ if(oppAgg&&oppAgg.gp>=2){
+   if(oppAgg.min>=26)score+=1;
+   if(oppAgg.fg!==null&&oppAgg.fg>=.50)score+=0.5;
+ }
+ if(requestedLeague==='shark'&&avgMin!==null&&avgMin<20)score=Math.min(score,-1);
+ if(score>=5)return {label:'START',cls:'start',why:'近期角色與分鐘足以優先吃場次'};
+ if(score>=2.5)return {label:'偏 START',cls:'lean',why:'可以上，但仍要看賽前角色與傷病消息'};
+ if(score>=0)return {label:'BN 觀察',cls:'bench',why:'角色或分鐘尚未穩定，82 場上限下先保留場次'};
+ return {label:'BN',cls:'danger',why:'近期分鐘偏低，歷史對位不足以抵銷場次成本'};
+}
+function renderDecision(){
+ const body=$('#decisionBody');if(!body)return;
+ const recent=recentRowsForPlayer(5),oppRows=selectedOpponentRows();
+ const mins=recent.map(r=>minuteValue(r.minutes));
+ const avgMin=avg(mins);
+ const trend=mins.slice().reverse().map(v=>v===null?'—':Math.round(v)).join(' → ');
+ const recentDD=recent.filter(isDoubleDouble).length;
+ const oppDD=oppRows.filter(isDoubleDouble).length;
+ const oppAgg=oppRows.length?aggregate(oppRows):null;
+ const d=decisionLabel(recent,oppRows);
+ const leagueName=requestedLeague==='shark'?'Shark Roto · 82場上限':'通用 Fantasy';
+ $('#leagueBadge').textContent=leagueName;
+ const opp=$('#opponent').value;
+ $('#decisionSubtitle').textContent=opp&&opp!=='ALL'
+   ?`近期角色 + 對 ${opp} 的所選賽季歷史`
+   :'近期角色為主；選擇對手後會加入 matchup 歷史';
+ const opponentText=oppAgg
+   ?`${oppAgg.gp} 場｜${fmt(oppAgg.pts)}分 ${fmt(oppAgg.reb)}板 ${fmt(oppAgg.blk)}鍋`
+   :'尚未選擇對手';
+ const ddText=oppRows.length?`${oppDD}/${oppRows.length}`:'—';
+ body.innerHTML=`
+   <div class="decision-main"><small>${requestedLeague==='shark'?'Shark Roto 建議':'Fantasy 輔助建議'}</small><strong class="${d.cls}">${d.label}</strong><div>${esc(d.why)}</div></div>
+   <div class="decision-item"><small>近5場平均 MIN</small><b>${avgMin===null?'—':avgMin.toFixed(1)}</b><div class="small">${esc(trend||'—')}</div></div>
+   <div class="decision-item"><small>近5場 DD</small><b>${recentDD}/${recent.length||0}</b><div class="small">DD 為獨立加權訊號</div></div>
+   <div class="decision-item"><small>對手歷史</small><b>${esc(opponentText)}</b><div class="small">只用已取得紀錄</div></div>
+   <div class="decision-item"><small>對手 DD</small><b>${esc(ddText)}</b><div class="small">${oppRows.length?'所選賽季交手':'選對手後顯示'}</div></div>`;
+}
+'''
+        if anchor not in html:
+            raise RuntimeError(
+                "opponents.html aggregate anchor missing; refusing to install decision helpers"
+            )
+        html = html.replace(anchor, helper + "\n" + anchor, 1)
+        changed = True
+
+    old_set_players = r''' const exact=available.find(p=>p.id===chosenId);
+ if(!exact){const previous=$('#playerInput').value.trim().toLowerCase();const match=available.find(p=>p.name.toLowerCase()===previous)||available.find(p=>p.name==='Tyrese Maxey')||available[0];chosenId=match?.id||'';}
+ $('#playerInput').value=available.find(p=>p.id===chosenId)?.name||'';
+ const teams=[...new Set(joined.map(p=>p.opponent).filter(Boolean))].sort();
+ const old=$('#opponent').value||'ALL';$('#opponent').innerHTML='<option value="ALL">全部 30 隊</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');$('#opponent').value=teams.includes(old)?old:'ALL';'''
+    new_set_players = r''' const exact=available.find(p=>p.id===chosenId);
+ if(!exact){
+   const previous=$('#playerInput').value.trim().toLowerCase();
+   const deep=requestedPlayer?available.find(p=>p.name.toLowerCase()===requestedPlayer.toLowerCase())||available.find(p=>p.name.toLowerCase().includes(requestedPlayer.toLowerCase())):null;
+   const match=deep||available.find(p=>p.name.toLowerCase()===previous)||available.find(p=>p.name==='Tyrese Maxey')||available[0];
+   chosenId=match?.id||'';
+ }
+ $('#playerInput').value=available.find(p=>p.id===chosenId)?.name||'';
+ const teams=[...new Set(joined.map(p=>p.opponent).filter(Boolean))].sort();
+ const old=$('#opponent').value||'ALL';
+ $('#opponent').innerHTML='<option value="ALL">全部 30 隊</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+ $('#opponent').value=teams.includes(requestedOpponent)?requestedOpponent:(teams.includes(old)?old:'ALL');'''
+    if "const deep=requestedPlayer?" not in html:
+        if old_set_players not in html:
+            raise RuntimeError(
+                "opponents.html setPlayers anchor missing; refusing to install deep-link selection"
+            )
+        html = html.replace(old_set_players, new_set_players, 1)
+        changed = True
+
+    render_anchor = (
+        " const availablePhases=[...new Set(joined.filter(p=>String(p.id||p.name)===chosenId)"
+        ".map(p=>p.phase))];"
+    )
+    if " renderDecision();\n const availablePhases=" not in html:
+        if render_anchor not in html:
+            raise RuntimeError(
+                "opponents.html render anchor missing; refusing to wire decision panel"
+            )
+        html = html.replace(
+            render_anchor, " renderDecision();\n" + render_anchor, 1
+        )
+        changed = True
+
+    if changed:
+        path.write_text(html, encoding="utf-8")
+        print("opponents.html: installed deep links, DD/minutes panel and START/BN helper")
+    else:
+        print("opponents.html: matchup decision upgrade already installed")
+    return changed
+
+
+def patch_updater() -> bool:
+    path = ROOT / "update_data.py"
+    src = path.read_text(encoding="utf-8")
+    if "failed_days = set()" in src and "fetch_range(" not in src:
+        print("update_data.py: daily scoreboard fix already installed")
         return False
-    begin = src.find('    ranges = [(start + dt.timedelta(days=i)')
-    end = src.find("    games = list({g['id']: g for g in games if g['id']}.values())", begin)
+
+    begin = src.find("    ranges = [(start + dt.timedelta(days=i)")
+    end = src.find(
+        "    games = list({g['id']: g for g in games if g['id']}.values())", begin
+    )
     if begin < 0 or end < begin:
-        raise RuntimeError('update_data.py: expected scoreboard block not found; refusing unsafe replacement')
-    # Keep the rest of the data updater unchanged, including its rebound parser,
-    # Taiwan time conversion, live update logic and historical cache merging.
-    replacement = '''    # ESPN sometimes rejects YYYYMMDD-YYYYMMDD date ranges (HTTP 400),
+        print("update_data.py: legacy multi-day block not found; left unchanged")
+        return False
+
+    replacement = r'''    # ESPN sometimes rejects YYYYMMDD-YYYYMMDD date ranges (HTTP 400),
     # even when every single-day scoreboard request works.
     days = [start + dt.timedelta(days=i) for i in range((end-start).days + 1)]
 
@@ -73,7 +363,6 @@ def patch_updater():
                 failed_days.add(day)
                 warnings.append(f'{day} 單日賽程抓取失敗：{exc}')
 
-    # Preserve previously fetched games for dates with temporary API failures.
     if failed_days:
         for saved in old.get('games') or []:
             instant = saved.get('start_time')
@@ -88,38 +377,95 @@ def patch_updater():
 
 '''
     src = src[:begin] + replacement + src[end:]
-    # Existing current warnings are replaced on the next full update.
-    path.write_text(src, encoding='utf-8')
-    print('update_data.py: removed failing multi-day calls; kept daily fetch and per-day cached fallback')
+    path.write_text(src, encoding="utf-8")
+    print("update_data.py: installed single-day scoreboard fallback")
     return True
 
 
-def patch_readme():
-    path = ROOT / 'README.md'
+def patch_readme() -> bool:
+    path = ROOT / "README.md"
     if not path.exists():
         return False
-    old = path.read_text(encoding='utf-8')
-    if '## 球員對手歷史數據' in old:
+    text = path.read_text(encoding="utf-8")
+    marker = "### START / BN 對戰輔助"
+    if marker in text:
         return False
-    new = old.rstrip() + '''
+    addition = r'''
 
-## 球員對手歷史數據
+### START / BN 對戰輔助
 
-- 首頁「📈 對手數據」連到 `opponents.html`，可查球員對各 NBA 球隊的已取得 9CAT 場均、逐場明細與 CSV。
-- `.github/workflows/opponent_history.yml` 以 GitHub Actions 排程執行 `update_history.py`，累積檔案在 `data/history/<season>.json`。
-- `data/nba.json` **仍保留原本近期資料格式與功能**；新歷史檔獨立保存完整逐場紀錄，避免每次更新被近期 7–8 天資料覆寫。
-- 預設開始累積 2026–27；可用 `python update_history.py --season 2016-17 --start 2016-10-01` 逐步回補其他賽季，但不代表已回補或驗證 2016 年至今所有資料。
-- 每位球員的對手由 `game_id` 連結比賽主客隊，球員與球隊別以當場資料為準。各隊別名會統一顯示。
-- FG%、FT% 使用總命中／總出手加權；場均統計只由已取得、可確認的紀錄計算。已標示的例行賽／季後賽可以篩選，舊紀錄缺少類型時不會擅自判定。
-- ESPN 公開端點不保證穩定，資料缺漏、傷病、Yahoo 私人名單仍需另外查核。GitHub 定時排程可能延遲或停用。
+- 球員 Box Score 名稱旁的「📈 對戰」可直接帶入球員、當場對手與目前 Fantasy 聯盟。
+- 對手頁會顯示近 5 場平均分鐘、分鐘趨勢、DD 次數、對手歷史與 DD 次數。
+- `Shark Roto` 使用 82 場上限的保守邏輯：近期分鐘／角色優先於歷史 matchup；低分鐘不會因歷史對位漂亮就自動判為 START。
+- START / BN 僅是資料型輔助，不會取代賽前傷病、先發與分鐘限制消息。
 '''
-    path.write_text(new, encoding='utf-8')
-    print('README.md: appended opponent-history setup notes')
+    path.write_text(text.rstrip() + addition + "\n", encoding="utf-8")
+    print("README.md: added START/BN matchup notes")
     return True
 
 
-if __name__ == '__main__':
-    patch_index()
-    patch_updater()
-    patch_readme()
-    print('Installation complete. Existing pages, settings and team profiles were preserved.')
+def patch_workflow() -> bool:
+    path = ROOT / ".github" / "workflows" / "opponent_history.yml"
+    if not path.exists():
+        print("opponent_history.yml: missing; current run will still stage site files")
+        return False
+    text = path.read_text(encoding="utf-8")
+    old = "git add index.html update_data.py README.md data/history/"
+    new = (
+        "git add index.html opponents.html update_data.py README.md data/history/ "
+        ".github/workflows/opponent_history.yml"
+    )
+    if new in text:
+        print("opponent_history.yml: staging list already upgraded")
+        return False
+    if old not in text:
+        print("opponent_history.yml: git add anchor not found; left unchanged")
+        return False
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("opponent_history.yml: future runs will commit opponents.html too")
+    return True
+
+
+def stage_for_current_workflow() -> None:
+    candidates = [
+        "index.html",
+        "opponents.html",
+        "update_data.py",
+        "README.md",
+        ".github/workflows/opponent_history.yml",
+    ]
+    existing = [x for x in candidates if (ROOT / x).exists()]
+    try:
+        subprocess.run(
+            ["git", "add", "--", *existing],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        print("git: staged upgraded dashboard files for this workflow run")
+    except Exception as exc:
+        print(f"git: staging skipped ({exc})")
+
+
+def main() -> None:
+    changed = []
+    for name, func in [
+        ("index", patch_index),
+        ("opponents", patch_opponents),
+        ("updater", patch_updater),
+        ("readme", patch_readme),
+        ("workflow", patch_workflow),
+    ]:
+        if func():
+            changed.append(name)
+    stage_for_current_workflow()
+    print(
+        "Upgrade complete. Changed: "
+        + (", ".join(changed) if changed else "nothing (already installed)")
+    )
+
+
+if __name__ == "__main__":
+    main()
