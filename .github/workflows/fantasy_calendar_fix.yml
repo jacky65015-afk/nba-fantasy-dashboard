@@ -1,0 +1,75 @@
+name: NBA Fantasy - Fix US Matchup Dates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-fantasy-data-update
+  cancel-in-progress: false
+
+jobs:
+  calendar-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout current dashboard
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Convert matchup dates safely
+        run: python fix_fantasy_calendar.py
+      - name: Verify Python syntax
+        run: python -m py_compile update_data.py update_history.py fix_fantasy_calendar.py
+      - name: Verify archived data format and known Fantasy Week 4 schedule
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          obj=json.load(open('data/nba.json',encoding='utf-8'))
+          assert obj['date_basis']=='tipoff_utc_to_America/New_York'
+          counts={}
+          for game in obj['games']:
+              when=game.get('start_time')
+              if not when: continue
+              eastern=datetime.fromisoformat(when.replace('Z','+00:00')).astimezone(ZoneInfo('America/New_York')).date().isoformat()
+              assert game['date']==eastern
+              if '2026-11-09'<=eastern<='2026-11-15':
+                  for team in [game['home'],game['away']]:
+                      counts[team]=counts.get(team,0)+1
+          for team,expected in {'NO':4,'BKN':2,'MIN':2,'CHI':3,'PHI':3,'WSH':4,'TOR':4}.items():
+              assert counts.get(team)==expected,(team,counts.get(team),expected)
+          assert len(counts)==30,(len(counts),counts)
+          print('Verified all 30 teams, US/Eastern Week 4:',sorted(counts.items()))
+          PY
+      - name: Publish corrected site and data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html opponents.html update_data.py update_history.py data/nba.json data/history/
+          if git diff --cached --quiet; then
+            echo 'No changes; already up to date.'
+            exit 0
+          fi
+          git commit -m 'Use Yahoo US matchup days while showing Taiwan tipoff times'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo 'Published US Fantasy game dates and Taiwan tipoff time fix.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Could not push corrected website after four attempts.' >&2
+          exit 1
