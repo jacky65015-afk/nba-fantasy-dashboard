@@ -1,0 +1,79 @@
+name: NBA Fantasy - Player Opponent History
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Which season to update (older seasons need repeated runs for backfill)'
+        required: true
+        default: '2026-27'
+        type: choice
+        options:
+          - '2026-27'
+          - '2025-26'
+          - '2024-25'
+          - '2023-24'
+          - '2022-23'
+          - '2021-22'
+          - '2020-21'
+          - '2019-20'
+          - '2018-19'
+          - '2017-18'
+          - '2016-17'
+  schedule:
+    - cron: '37 0,4,8,12,16,20 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-fantasy-history
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout existing Dashboard
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Safely add opponent page and fix scoreboard queries
+        run: python upgrade_dashboard.py
+
+      - name: Incrementally archive selected NBA season
+        env:
+          SELECTED_SEASON: ${{ inputs.season || '2026-27' }}
+        run: python update_history.py --season "$SELECTED_SEASON" --days-per-run 45 --max-game-summaries 120
+
+      - name: Commit changed site and archived data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html update_data.py README.md data/history/
+          if git diff --cached --quiet; then
+            echo 'No new historical data or dashboard changes.'
+            exit 0
+          fi
+          git commit -m 'Update opponent-history database and dashboard navigation'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              echo 'History and dashboard updates published.'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Failed to publish after three attempts.' >&2
+          exit 1
