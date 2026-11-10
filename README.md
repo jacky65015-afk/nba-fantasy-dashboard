@@ -27,3 +27,13 @@ python -m http.server 8000
 - 每日球員數據限本次更新擷取的最近 7 天已取得 box score 的比賽。頁面顯示來源資料時間及錯誤，**不會憑空補數據**。
 - 無連線/更新失敗時，可能使用上次成功的快取；網站會顯示快取時間。
 - Yahoo Fantasy 名單和 FA 是私有聯盟資料，需自行輸入或另行以合規 Yahoo OAuth 授權整合；此版本**不會**同步你的 Yahoo 名單。
+
+## 球員對手歷史數據
+
+- 首頁「📈 對手數據」連到 `opponents.html`，可查球員對各 NBA 球隊的已取得 9CAT 場均、逐場明細與 CSV。
+- `.github/workflows/opponent_history.yml` 以 GitHub Actions 排程執行 `update_history.py`，累積檔案在 `data/history/<season>.json`。
+- `data/nba.json` **仍保留原本近期資料格式與功能**；新歷史檔獨立保存完整逐場紀錄，避免每次更新被近期 7–8 天資料覆寫。
+- 預設開始累積 2026–27；可用 `python update_history.py --season 2016-17 --start 2016-10-01` 逐步回補其他賽季，但不代表已回補或驗證 2016 年至今所有資料。
+- 每位球員的對手由 `game_id` 連結比賽主客隊，球員與球隊別以當場資料為準。各隊別名會統一顯示。
+- FG%、FT% 使用總命中／總出手加權；場均統計只由已取得、可確認的紀錄計算。已標示的例行賽／季後賽可以篩選，舊紀錄缺少類型時不會擅自判定。
+- ESPN 公開端點不保證穩定，資料缺漏、傷病、Yahoo 私人名單仍需另外查核。GitHub 定時排程可能延遲或停用。

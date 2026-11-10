@@ -342,16 +342,11 @@ def main(live=False):
     teams_by_abbr = {}
     # League schedule for 14 days ago through 28 days ahead.
     start, end = today - dt.timedelta(days=14), today + dt.timedelta(days=28)
-    ranges = [(start + dt.timedelta(days=i), min(start + dt.timedelta(days=i+6), end)) for i in range(0, (end-start).days+1, 7)]
-    def fetch_range(pair):
-        a, b = pair
-        url = BASE + '/scoreboard?' + urllib.parse.urlencode({
-            'dates': f'{a:%Y%m%d}-{b:%Y%m%d}', 'limit': 300
-        })
-        return get_json(url)
+    # ESPN sometimes rejects YYYYMMDD-YYYYMMDD date ranges (HTTP 400),
+    # even when every single-day scoreboard request works.
+    days = [start + dt.timedelta(days=i) for i in range((end-start).days + 1)]
 
     def fetch_day(day):
-        # ESPN's single-day query is often more compatible than a date range.
         url = BASE + '/scoreboard?' + urllib.parse.urlencode({
             'dates': day.strftime('%Y%m%d'), 'limit': 300
         })
@@ -365,38 +360,32 @@ def main(live=False):
                 if t['abbr']:
                     teams_by_abbr[t['abbr']] = t
 
-    failed_ranges = []
+    failed_days = set()
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        tasks = {pool.submit(fetch_range, pair): pair for pair in ranges}
+        tasks = {pool.submit(fetch_day, day): day for day in days}
         for future in concurrent.futures.as_completed(tasks):
-            a, b = tasks[future]
+            day = tasks[future]
             try:
-                add_events(future.result())
+                response = future.result()
+                if not isinstance(response.get('events'), list):
+                    raise ValueError('Missing events list')
+                add_events(response)
             except Exception as exc:
-                failed_ranges.append((a, b))
-                warnings.append(f'{a} 至 {b} 區間賽程抓取失敗：{exc}')
+                failed_days.add(day)
+                warnings.append(f'{day} 單日賽程抓取失敗：{exc}')
 
-    # Fallback for weeks rejected by ESPN's date-range endpoint.
-    # Check one day first; if blocked too, avoid dozens of useless requests.
-    if failed_ranges:
-        probe = failed_ranges[0][0]
-        try:
-            add_events(fetch_day(probe))
-            print(f'Daily scoreboard probe succeeded: {probe}', flush=True)
-            days = sorted({a + dt.timedelta(days=i)
-                           for a, b in failed_ranges
-                           for i in range((b-a).days + 1)
-                           if a + dt.timedelta(days=i) != probe})
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-                tasks = {pool.submit(fetch_day, day): day for day in days}
-                for future in concurrent.futures.as_completed(tasks):
-                    day = tasks[future]
-                    try:
-                        add_events(future.result())
-                    except Exception as exc:
-                        warnings.append(f'{day} 單日賽程抓取失敗：{exc}')
-        except Exception as exc:
-            warnings.append(f'單日賽程備援也失敗（{probe}）：{exc}')
+    # Preserve previously fetched games for dates with temporary API failures.
+    if failed_days:
+        for saved in old.get('games') or []:
+            instant = saved.get('start_time')
+            if not instant:
+                continue
+            try:
+                date_et = dt.datetime.fromisoformat(instant.replace('Z', '+00:00')).astimezone(ET).date()
+            except (ValueError, TypeError, OverflowError):
+                continue
+            if date_et in failed_days:
+                games.append(saved)
 
     games = list({g['id']: g for g in games if g['id']}.values())
     games.sort(key=lambda r: (r['date'], r['id']))

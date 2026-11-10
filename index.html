@@ -8,6 +8,8 @@
 
 /* Fantasy-style column sorting */
 th.sort-col{padding:0;white-space:nowrap}th.sort-col button{width:100%;padding:11px 12px;border:0;background:transparent;color:inherit;text-align:left;font-size:11px;font-weight:800;cursor:pointer}th.sort-col button:hover,th.sort-col button:focus-visible{background:#284467;color:#fff;outline-offset:-2px}th.sort-col[aria-sort="ascending"] button,th.sort-col[aria-sort="descending"] button{color:#83e9d7}td.rank{font-weight:800;color:#8de8d3;font-variant-numeric:tabular-nums}.rank-help{margin:-3px 0 12px;font-size:12px;color:#99b1d0}.rank-help b{color:#c3e4f7}
+
+.tabs a.tab{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 </style>
 </head>
 <body><div class="shell">
@@ -15,7 +17,7 @@ th.sort-col{padding:0;white-space:nowrap}th.sort-col button{width:100%;padding:1
 <section class="hero"><div><div class="eyebrow">YOUR FANTASY COMMAND CENTER</div><h2>每一場比賽，都有更好的選擇。</h2><p>30 隊逐週賽程、B2B、球員近期表現、傷病資訊與六支獨立 Fantasy 策略。公開資料最多每四小時排程更新一次，實際以資料時間為準。</p></div><div class="hero-details"><div class="small">NBA 公開資料最近產出</div><div class="big" id="lastUpdated">尚未產出</div><div class="small" id="nextRefresh">每 4 小時檢查一次</div></div></section>
 <section class="stats"><div class="stat"><div class="name">NBA 已取得球隊</div><strong id="nTeams">—</strong><div class="hint">官方球隊數 30</div></div><div class="stat"><div class="name">賽程資料筆數</div><strong id="nGames">—</strong><div class="hint">已取得賽程範圍</div></div><div class="stat"><div class="name">近期球員單場數據</div><strong id="nPlayers">—</strong><div class="hint">最近 7 天成功取得的紀錄</div></div><div class="stat"><div class="name">已取得傷病紀錄</div><strong id="nInjuries">—</strong><div class="hint">非完整官方傷病名單</div></div></section>
 <div class="workspace"><aside class="sidebar"><div class="side-title">MY FANTASY LEAGUES · 6</div><div id="leagues" class="side-leagues"></div><div class="side-footer">🔐 私有隊伍設定只存在這台裝置的瀏覽器內。切換裝置不會自動同步，也不代表已連動 Yahoo。</div></aside>
-<main class="main"><nav class="tabs" id="tabs"><button class="tab active" data-tab="overview">📊 球隊策略</button><button class="tab" data-tab="schedule">🗓 逐週賽程</button><button class="tab" data-tab="players">🏀 球員數據</button><button class="tab" data-tab="injuries">🩹 傷病追蹤</button><button class="tab" data-tab="settings">⚙ 隊伍設定</button></nav><div id="warning"></div><div id="content"></div></main></div>
+<main class="main"><nav class="tabs" id="tabs"><button class="tab active" data-tab="overview">📊 球隊策略</button><button class="tab" data-tab="schedule">🗓 逐週賽程</button><button class="tab" data-tab="players">🏀 球員數據</button><a class="tab" href="./opponents.html" title="每位球員對各隊的歷史 9CAT 平均">📈 對手數據</a><button class="tab" data-tab="injuries">🩹 傷病追蹤</button><button class="tab" data-tab="settings">⚙ 隊伍設定</button></nav><div id="warning"></div><div id="content"></div></main></div>
 <p class="banner">資料來源：ESPN 公開網站端點（非官方 API）｜未取得 ≠ 無傷病｜每日資料日期依美東賽程日｜本站不提供即時 Yahoo 自動登入</p>
 </div><div id="toast" class="toast hidden" role="status"></div>
 <script>
