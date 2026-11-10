@@ -15,8 +15,8 @@ Features installed:
 3. Opponent analysis adds recent minutes, DD rate and a conservative START/BN
    helper. Shark Roto uses an 82-game-cap-aware heuristic: recent role/minutes
    are more important than historical matchup.
-4. The opponent-history workflow is fixed so opponents.html and the workflow
-   itself are included in future commits.
+4. The script stages opponents.html during the current Actions run so the existing
+   commit step includes it without modifying any workflow YAML file.
 5. Existing ESPN daily scoreboard safety patch and README notes are preserved.
 
 No Yahoo login, private roster API, or invented historical records are added.
@@ -404,35 +404,13 @@ def patch_readme() -> bool:
     return True
 
 
-def patch_workflow() -> bool:
-    path = ROOT / ".github" / "workflows" / "opponent_history.yml"
-    if not path.exists():
-        print("opponent_history.yml: missing; current run will still stage site files")
-        return False
-    text = path.read_text(encoding="utf-8")
-    old = "git add index.html update_data.py README.md data/history/"
-    new = (
-        "git add index.html opponents.html update_data.py README.md data/history/ "
-        ".github/workflows/opponent_history.yml"
-    )
-    if new in text:
-        print("opponent_history.yml: staging list already upgraded")
-        return False
-    if old not in text:
-        print("opponent_history.yml: git add anchor not found; left unchanged")
-        return False
-    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-    print("opponent_history.yml: future runs will commit opponents.html too")
-    return True
-
-
 def stage_for_current_workflow() -> None:
+    """Stage site files now; do not modify or stage workflow YAML files."""
     candidates = [
         "index.html",
         "opponents.html",
         "update_data.py",
         "README.md",
-        ".github/workflows/opponent_history.yml",
     ]
     existing = [x for x in candidates if (ROOT / x).exists()]
     try:
@@ -456,7 +434,6 @@ def main() -> None:
         ("opponents", patch_opponents),
         ("updater", patch_updater),
         ("readme", patch_readme),
-        ("workflow", patch_workflow),
     ]:
         if func():
             changed.append(name)
