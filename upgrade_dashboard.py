@@ -10,7 +10,7 @@ The script is intentionally non-destructive. It patches the current site in
 place and refuses unsafe replacements when expected anchors are missing.
 
 Features installed:
-1. Player box-score rows get a direct "📈 對戰" link.
+1. Player box-score rows get a direct "📈 對戰" link, and scheduled future games get a pregame matchup panel.
 2. The opponent page accepts ?player=...&opponent=...&league=... deep links.
 3. Opponent analysis adds recent minutes, DD rate and a conservative START/BN
    helper. Shark Roto uses an 82-game-cap-aware heuristic: recent role/minutes
@@ -116,6 +116,137 @@ function matchupHref(p){
         print("index.html: matchup links already installed")
     return changed
 
+
+
+def patch_pregame_index() -> bool:
+    # Allow matchup lookup before tipoff using schedule + last known player team.
+    path = ROOT / "index.html"
+    html = path.read_text(encoding="utf-8")
+    changed = False
+
+    old_dates = '''function gameDateOptions(){
+  // US/Eastern today is selectable even before the games have started.
+  // Never relabel yesterday's statistics as today's.
+  return [...new Set([fantasyToday(),...data.player_games.map(p=>p.date).filter(Boolean)])].sort().reverse();
+}'''
+    new_dates = '''function gameDateOptions(){
+  // Include scheduled dates as well as completed Box Score dates so pregame
+  // matchup lookup works before tipoff.
+  return [...new Set([
+    fantasyToday(),
+    ...data.games.map(g=>g.date).filter(Boolean),
+    ...data.player_games.map(p=>p.date).filter(Boolean)
+  ])].sort().reverse();
+}'''
+    if old_dates in html:
+        html = html.replace(old_dates, new_dates, 1)
+        changed = True
+    elif new_dates not in html:
+        raise RuntimeError("index.html gameDateOptions anchor missing; refusing unsafe pregame patch")
+
+    helper_anchor = "function pctDecimal(m,a){"
+    helper = r'''function latestKnownPlayers(){
+  const ordered=[...data.player_games].sort((a,b)=>
+    String(a.date||'').localeCompare(String(b.date||''))||
+    String(a.start_time||'').localeCompare(String(b.start_time||''))
+  );
+  const byId=new Map();
+  for(const p of ordered){
+    const key=String(p.id||p.name||'').trim();
+    if(key)byId.set(key,p);
+  }
+  return [...byId.values()];
+}
+function pregameRowsForDate(date){
+  const scheduled=data.games.filter(g=>
+    g.date===date &&
+    !g.completed &&
+    !['STATUS_IN_PROGRESS','STATUS_HALFTIME'].includes(String(g.status||''))
+  );
+  if(!scheduled.length)return [];
+  const teamGame=new Map();
+  for(const g of scheduled){
+    if(g.home&&g.away){
+      teamGame.set(g.home,{opp:g.away,game:g});
+      teamGame.set(g.away,{opp:g.home,game:g});
+    }
+  }
+  const already=new Set(
+    data.player_games.filter(p=>p.date===date).map(p=>String(p.id||p.name||''))
+  );
+  let rows=latestKnownPlayers()
+    .filter(p=>teamGame.has(p.team)&&!already.has(String(p.id||p.name||'')))
+    .map(p=>{
+      const m=teamGame.get(p.team);
+      return {...p,_pregame:true,_opp:m.opp,_game:m.game};
+    });
+
+  const rosterText=String(getSetting().roster||'').toLowerCase();
+  if(rosterText.trim()){
+    const rosterOnly=rows.filter(p=>
+      p.name && rosterText.includes(String(p.name).toLowerCase())
+    );
+    if(rosterOnly.length)rows=rosterOnly;
+  }
+  return rows;
+}
+function pregameMatchupHref(p){
+  const q=new URLSearchParams();
+  q.set('player',p.name||'');
+  q.set('league',leagueId);
+  if(p._opp)q.set('opponent',p._opp);
+  return './opponents.html?'+q.toString();
+}
+function pregamePanelHtml(rows,date){
+  if(!rows.length)return '';
+  return `<div class="info" style="margin:14px 0">
+    <h4>⏰ 賽前對戰查詢 · ${esc(date)}</h4>
+    <p class="small">尚未產生 Box Score；球員隊別使用最近一次已取得紀錄，對手來自已抓取賽程。</p>
+    <div class="table-wrap" style="margin-top:10px"><table>
+      <thead><tr><th>球員</th><th>隊</th><th>對手</th><th>台灣開賽</th><th>分析</th></tr></thead>
+      <tbody>${rows.map(p=>`<tr>
+        <td><strong>${esc(p.name)}</strong></td>
+        <td>${esc(p.team)}</td>
+        <td><strong>${esc(p._opp)}</strong></td>
+        <td>${esc(tipoffTaiwan(p._game?.start_time))}</td>
+        <td><a href="${esc(pregameMatchupHref(p))}">📈 賽前對戰</a></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+'''
+    if "function pregameRowsForDate(date)" not in html:
+        if helper_anchor not in html:
+            raise RuntimeError("index.html pctDecimal anchor missing; refusing pregame helper insertion")
+        html = html.replace(helper_anchor, helper + "\n" + helper_anchor, 1)
+        changed = True
+
+    old_rows = '''  let rows=dayRows.filter(p=>(playerTeamFilter==='ALL'||p.team===playerTeamFilter)&&(`${p.name} ${p.team}`).toLowerCase().includes(search.toLowerCase()));
+  rows.sort((a,b)=>comparePlayer(a,b,playerSort,playerSortDir));'''
+    new_rows = '''  let rows=dayRows.filter(p=>(playerTeamFilter==='ALL'||p.team===playerTeamFilter)&&(`${p.name} ${p.team}`).toLowerCase().includes(search.toLowerCase()));
+  let preRows=pregameRowsForDate(playerDate).filter(p=>(playerTeamFilter==='ALL'||p.team===playerTeamFilter)&&(`${p.name} ${p.team} ${p._opp}`).toLowerCase().includes(search.toLowerCase()));
+  preRows.sort((a,b)=>String(a.team).localeCompare(String(b.team))||String(a.name).localeCompare(String(b.name)));
+  rows.sort((a,b)=>comparePlayer(a,b,playerSort,playerSortDir));'''
+    if "let preRows=pregameRowsForDate(playerDate)" not in html:
+        if old_rows not in html:
+            raise RuntimeError("index.html renderPlayers row anchor missing; refusing pregame row wiring")
+        html = html.replace(old_rows, new_rows, 1)
+        changed = True
+
+    old_insert = '''</div><p class="small">${data.legacy_dates_estimated||dayRows.some(p=>p.date_inferred)?'''
+    new_insert = '''</div>${pregamePanelHtml(preRows,playerDate)}<p class="small">${data.legacy_dates_estimated||dayRows.some(p=>p.date_inferred)?'''
+    if "pregamePanelHtml(preRows,playerDate)" not in html:
+        if old_insert not in html:
+            raise RuntimeError("index.html renderPlayers template anchor missing; refusing pregame panel insertion")
+        html = html.replace(old_insert, new_insert, 1)
+        changed = True
+
+    if changed:
+        path.write_text(html, encoding="utf-8")
+        print("index.html: enabled pregame matchup lookup for scheduled future games")
+    else:
+        print("index.html: pregame matchup lookup already installed")
+    return changed
 
 def patch_opponents() -> bool:
     path = ROOT / "opponents.html"
@@ -431,6 +562,7 @@ def main() -> None:
     changed = []
     for name, func in [
         ("index", patch_index),
+        ("pregame", patch_pregame_index),
         ("opponents", patch_opponents),
         ("updater", patch_updater),
         ("readme", patch_readme),
