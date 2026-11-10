@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1021">
+<title>NBA Fantasy｜對手數據分析 · 六隊作戰中心</title>
+<style>
+:root{color-scheme:dark;--bg:#080e1b;--pane:#111b2e;--pane2:#16243a;--edge:#293952;--text:#edf4ff;--muted:#98acc8;--blue:#7cbbff;--teal:#4ce4c7;--yellow:#ffd27f}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top right,#142547 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,'Noto Sans TC','Microsoft JhengHei',sans-serif}a{color:var(--blue)}
+main{max-width:1500px;margin:auto;padding:28px 22px 55px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:47px;height:47px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(130deg,#376ed5,#28bcae);font-size:25px}.eyebrow{font-size:11px;letter-spacing:1.5px;color:var(--teal);font-weight:800}h1{font-size:22px;margin:0}.button{display:inline-block;text-decoration:none;background:#1a2b44;border:1px solid #385374;color:#e6f0ff;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer}.button:hover{background:#294566}.panel{background:var(--pane);border:1px solid var(--edge);border-radius:15px;padding:19px;margin-bottom:16px}.panel h2{font-size:17px;margin:0 0 4px}.small{font-size:12px;color:var(--muted)}.alert{background:#332a1b;border:1px solid #7b6334;border-radius:11px;padding:11px 13px;color:#f0d9ae;font-size:12px;margin:12px 0}.ok{color:#7af2c7}.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}.field label{display:block;font-size:12px;color:#a8c1df;margin-bottom:6px}.field input,.field select{width:100%;min-width:0;border-radius:9px;padding:10px 11px;color:#eaf2ff;background:#0c182b;border:1px solid #36506f;font:inherit}#playerInput{width:100%}input:focus,select:focus{outline:2px solid #527db9;outline-offset:1px}.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}.stat{border:1px solid var(--edge);background:#122139;border-radius:12px;padding:13px 14px}.stat small{display:block;color:#9eb7d6;margin-bottom:7px}.stat strong{font-size:23px;font-variant-numeric:tabular-nums}.pill{font-size:11px;border:1px solid #355271;border-radius:999px;padding:3px 10px;color:#accbec;white-space:nowrap}.heading{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.heading h2{margin:0}.wrap{overflow:auto;border:1px solid var(--edge);border-radius:10px;max-height:610px}table{border-collapse:collapse;width:100%;white-space:nowrap;font-variant-numeric:tabular-nums}th,td{padding:10px 11px;border-bottom:1px solid #283a52;font-size:12px;text-align:right}th{background:#1b2a40;color:#aec5df;position:sticky;top:0;z-index:1;font-size:11px}td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:#15253b;z-index:2}th:first-child{z-index:3;background:#1b2a40}tr:hover td{background:#1b304b}tr:hover td:first-child{background:#1b304b}th button{border:0;background:none;color:inherit;cursor:pointer;font:inherit;font-weight:800;padding:0;white-space:nowrap}th button:hover{color:#74e2d2}tbody tr:last-child td{border-bottom:0}.warn{color:#ffd27f}.muted{color:#9dafc8}.strong{color:#7decd2;font-weight:800}.table-title{font-weight:800;color:#e5f6ff}.foot{margin-top:13px;color:#9db4d0;font-size:12px}.empty{border:1px dashed #3c5674;border-radius:10px;padding:35px;text-align:center;color:#aac1df}.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.hint{margin-top:8px;color:#a4b9d5;font-size:12px}footer{color:#90a8c6;text-align:center;font-size:12px;margin:22px 0}@media(max-width:1100px){.filters{grid-template-columns:repeat(3,minmax(0,1fr))}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){main{padding:15px 10px 40px}h1{font-size:18px}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.field.player{grid-column:span 2}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:13px}.stat strong{font-size:20px}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand"><div class="logo">🏀</div><div><div class="eyebrow">NBA FANTASY · PLAYER MATCHUPS</div><h1>球員對手數據分析</h1></div></div>
+    <div class="actions"><a class="button" href="./index.html">← 六隊作戰中心</a><button class="button" id="reload" type="button">↻ 檢查更新</button></div>
+  </header>
+  <section class="panel">
+    <div class="heading"><div><h2>球員 × 對戰球隊 × 9CAT</h2><div class="small" id="sourceStatus">載入資料中…</div></div><span class="pill" id="sourceBadge">NBA 公開資料</span></div>
+    <div class="filters">
+      <div class="field"><label for="season">賽季</label><select id="season"></select></div>
+      <div class="field player"><label for="playerInput">球員姓名（可輸入搜尋）</label><input id="playerInput" list="playerNames" placeholder="搜尋 Maxey、Traoré…" autocomplete="off"><datalist id="playerNames"></datalist></div>
+      <div class="field"><label for="opponent">對手球隊</label><select id="opponent"><option value="ALL">全部 30 隊</option></select></div>
+      <div class="field"><label for="recent">統計期間</label><select id="recent"><option value="ALL">本賽季所有已取得比賽</option><option value="5">最近 5 場</option><option value="10">最近 10 場</option><option value="30">最近 30 場</option></select></div>
+      <div class="field"><label for="phase">賽事類型</label><select id="phase"><option value="ALL">全部賽事</option><option value="regular">例行賽（已標記）</option><option value="playoffs">季後賽（已標記）</option></select></div>
+    </div>
+    <div class="hint" id="dataNote"></div>
+    <div id="warning"></div>
+  </section>
+  <section class="stats" id="summary" aria-label="球員統計摘要"></section>
+  <section class="panel">
+    <div class="heading"><div><h2>📊 對各隊歷史平均</h2><div class="small">FG%／FT% 按命中數與出手數加權，非場均百分比直接平均；其餘為每場平均</div></div><span class="pill" id="matchCount">—</span></div>
+    <div class="wrap"><table id="opponentTable"><thead><tr id="opponentHeaders"></tr></thead><tbody id="opponentRows"></tbody></table></div>
+    <div class="foot">資料樣本不足時請謹慎解讀，尤其僅交手 1–2 場的對手；缺失統計顯示「—」，不當作零。表頭可點擊排序。</div>
+  </section>
+  <section class="panel">
+    <div class="heading"><div><h2>🗓 對戰逐場紀錄</h2><div class="small">所有日期以台灣時間呈現，可下載目前篩選資料</div></div><button class="button" id="export" type="button">下載 CSV</button></div>
+    <div class="wrap"><table><thead><tr><th>日期</th><th>對手</th><th>MIN</th><th>FG%</th><th>FG</th><th>FT%</th><th>FT</th><th>3PM</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th></tr></thead><tbody id="gameRows"></tbody></table></div>
+  </section>
+  <footer>資料來源：ESPN 公開網站端點（非官方）｜不是 Yahoo 官方 Fantasy 數據｜各賽季與各對手僅使用實際已取得的比賽，不推估缺失歷史紀錄。</footer>
+</main>
+<script>
+'use strict';
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const alias={GS:'GSW',NO:'NOP',NY:'NYK',SA:'SAS',UTAH:'UTA',WSH:'WAS'};
+const abbr=s=>alias[String(s||'').toUpperCase()]||String(s||'').toUpperCase();
+const num=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
+const fmt=x=>num(x)===null?'—':x.toFixed(1);
+const fmtInt=x=>num(x)===null?'—':Math.round(x).toLocaleString('en-US');
+const shots=(m,a)=>num(m)!==null&&num(a)!==null?Math.round(m)+'/'+Math.round(a):'—';
+const pct=(m,a)=>num(m)!==null&&num(a)!==null&&a>0?(m/a).toFixed(3).replace(/^0/,''):'—';
+const fields=['tpm','pts','reb','ast','stl','blk','tov'];
+const textDates=s=>s?new Date(s).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+let manifest=[],archive=null,available=[],chosenId='',joined=[],visibleGames=[],sortKey='gp',sortDesc=true,sourceMode='history';
+
+function aggregate(rows){
+ const obj={gp:rows.length};
+ for(const key of fields){const actual=rows.map(r=>num(r[key])).filter(n=>n!==null);obj[key]=actual.length?actual.reduce((a,b)=>a+b,0)/actual.length:null;obj[key+'Known']=actual.length;}
+ const sums={};for(const key of ['fgm','fga','ftm','fta']){const vals=rows.map(r=>num(r[key])).filter(n=>n!==null);sums[key]=vals.length?vals.reduce((a,b)=>a+b,0):null;}
+ obj.fgm=sums.fgm;obj.fga=sums.fga;obj.ftm=sums.ftm;obj.fta=sums.fta;
+ obj.fg=sums.fga>0&&sums.fgm!==null?sums.fgm/sums.fga:null;
+ obj.ft=sums.fta>0&&sums.ftm!==null?sums.ftm/sums.fta:null;
+ const min=rows.map(r=>{const s=String(r.minutes||'');if(/^\d+:\d+$/.test(s)){const [a,b]=s.split(':').map(Number);return a+b/60;}const v=Number(s);return s.trim()&&Number.isFinite(v)?v:null;}).filter(v=>v!==null);
+ obj.min=min.length?min.reduce((a,b)=>a+b,0)/min.length:null;
+ return obj;
+}
+function joinGames(data){
+ const games=new Map((data.games||[]).map(g=>[String(g.id),g]));const found=[];
+ for(const p of data.player_games||[]){const g=games.get(String(p.game_id));if(!g)continue;
+   const team=abbr(p.team),home=abbr(g.home),away=abbr(g.away);
+   const opp=team===home?away:team===away?home:'';
+   if(!opp||opp==='TBD')continue;
+   found.push({...p,opponent:opp,team,phase:g.phase||'unknown',isComplete:!!g.completed});
+ }return found;
+}
+function playersAvailable(){
+ const ids=new Map();for(const p of joined){const id=String(p.id||p.name||'');if(!id)continue;const existing=ids.get(id);if(!existing||existing.date<=p.date)ids.set(id,{id,name:p.name||id,date:p.date||''});}
+ return [...ids.values()].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+}
+function setPlayers(){
+ available=playersAvailable();
+ $('#playerNames').innerHTML=available.map(p=>`<option value="${esc(p.name)}"></option>`).join('');
+ const exact=available.find(p=>p.id===chosenId);
+ if(!exact){const previous=$('#playerInput').value.trim().toLowerCase();const match=available.find(p=>p.name.toLowerCase()===previous)||available.find(p=>p.name==='Tyrese Maxey')||available[0];chosenId=match?.id||'';}
+ $('#playerInput').value=available.find(p=>p.id===chosenId)?.name||'';
+ const teams=[...new Set(joined.map(p=>p.opponent).filter(Boolean))].sort();
+ const old=$('#opponent').value||'ALL';$('#opponent').innerHTML='<option value="ALL">全部 30 隊</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');$('#opponent').value=teams.includes(old)?old:'ALL';
+}
+function getSelectedRows(){
+ let rows=joined.filter(p=>String(p.id||p.name)===chosenId).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.game_id).localeCompare(String(a.game_id)));
+ const phase=$('#phase').value;
+ if(phase!=='ALL')rows=rows.filter(p=>p.phase===phase);
+ const recent=$('#recent').value;
+ if(recent!=='ALL')rows=rows.slice(0,Number(recent));
+ const opponent=$('#opponent').value;
+ if(opponent!=='ALL')rows=rows.filter(p=>p.opponent===opponent);
+ return rows;
+}
+const labels=[['opp','對手'],['gp','GP'],['min','MIN'],['fg','FG%'],['fgshots','FG'],['ft','FT%'],['ftshots','FT'],['tpm','3PM'],['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['tov','TO']];
+function render(){
+ visibleGames=getSelectedRows();
+ const totals=aggregate(visibleGames);
+ const cards=[['GP',fmtInt(totals.gp)],['PTS',fmt(totals.pts)],['3PM',fmt(totals.tpm)],['REB',fmt(totals.reb)],['AST',fmt(totals.ast)],['STL / BLK',fmt(totals.stl)+' / '+fmt(totals.blk)],['FG%',pct(totals.fgm,totals.fga)],['FT%',pct(totals.ftm,totals.fta)],['TO',fmt(totals.tov)]];
+ $('#summary').innerHTML=cards.map(([label,value])=>`<div class="stat"><small>${label}</small><strong>${value}</strong></div>`).join('');
+ const groups=new Map();for(const p of visibleGames){const arr=groups.get(p.opponent)||[];arr.push(p);groups.set(p.opponent,arr)}
+ const byOpp=[...groups.entries()].map(([opp,rows])=>({opp,...aggregate(rows)}));
+ byOpp.sort((a,b)=>{const ax=a[sortKey],bx=b[sortKey];if(sortKey==='opp')return (sortDesc?-1:1)*String(ax).localeCompare(String(bx));if(ax===null)return 1;if(bx===null)return -1;return (sortDesc?-1:1)*(ax-bx)});
+ $('#matchCount').textContent=byOpp.length+' 個對手 · '+visibleGames.length+' 場';
+ $('#opponentHeaders').innerHTML=labels.map(([key,label])=>`<th><button type="button" data-sort="${key}" title="依 ${esc(label)} 排序">${esc(label)}${key===sortKey?(sortDesc?' ▼':' ▲'):''}</button></th>`).join('');
+ const show=(r,k)=>k==='opp'?`<span class="table-title">${esc(r.opp)}</span>`:k==='gp'?fmtInt(r.gp):k==='fg'?pct(r.fgm,r.fga):k==='ft'?pct(r.ftm,r.fta):k==='fgshots'?shots(r.fgm,r.fga):k==='ftshots'?shots(r.ftm,r.fta):fmt(r[k]);
+ $('#opponentRows').innerHTML=byOpp.length?byOpp.map(r=>'<tr>'+labels.map(([key])=>`<td>${show(r,key)}${key==='gp'&&r.gp<3?' <span class="warn" title="樣本數較少">⚠</span>':''}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="14" class="muted">這個球員在所選條件下沒有已取得的對戰紀錄。</td></tr>';
+ document.querySelectorAll('[data-sort]').forEach(el=>el.onclick=()=>{const key=el.dataset.sort;if(key===sortKey)sortDesc=!sortDesc;else{sortKey=key;sortDesc=key!=='opp'}render()});
+ const logKeys=['date','opponent','minutes','fg','fgshots','ft','ftshots','tpm','pts','reb','ast','stl','blk','tov'];
+ const logValue=(r,key)=>key==='date'?esc(r.date):key==='opponent'?esc(r.opponent):key==='fg'?pct(r.fgm,r.fga):key==='ft'?pct(r.ftm,r.fta):key==='fgshots'?shots(r.fgm,r.fga):key==='ftshots'?shots(r.ftm,r.fta):key==='minutes'?esc(r.minutes||'—'):fmtInt(num(r[key]));
+ $('#gameRows').innerHTML=visibleGames.length?visibleGames.map(r=>'<tr>'+logKeys.map(k=>`<td>${logValue(r,k)}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="14" class="muted">無已取得的比賽紀錄</td></tr>';
+ const availablePhases=[...new Set(joined.filter(p=>String(p.id||p.name)===chosenId).map(p=>p.phase))];
+ $('#dataNote').textContent=`目前球員：${available.find(p=>p.id===chosenId)?.name||'—'}｜已取得 ${joined.filter(p=>String(p.id||p.name)===chosenId).length} 場｜資料涵蓋 ${joined.length} 筆可辨識對手的球員比賽紀錄。${availablePhases.includes('unknown')?'部分舊資料未標記例行賽或季後賽，選擇「例行賽」可能不包含它們。':''}`;
+}
+async function loadSeason(id){
+ const picked=manifest.find(s=>s.id===id);if(!picked)throw Error('找不到賽季資料');
+ const res=await fetch('./'+picked.file+'?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);
+ archive=await res.json();sourceMode='history'; joined=joinGames(archive);setPlayers();
+ $('#sourceStatus').textContent=`賽季 ${id} ｜更新：${textDates(archive.generated_at)}｜${archive.games?.length||0} 場比賽｜${joined.length} 筆球員紀錄`;
+ $('#sourceBadge').textContent='累積歷史資料';
+ $('#warning').innerHTML=(archive.warnings||[]).length?`<div class="alert">部分來源擷取有警告（${archive.warnings.length} 項）。歷史資料可能仍在補抓中，請依已取得場次判讀。</div>`:'';
+ render();
+}
+async function init(){
+ $('#sourceStatus').textContent='正在檢查歷史資料…';
+ try{
+  const res=await fetch('./data/history/index.json?v='+Date.now(),{cache:'no-store'});
+  if(!res.ok)throw Error('沒有歷史索引');
+  const content=await res.json();manifest=content.seasons||[];
+  if(!manifest.length)throw Error('歷史索引尚無賽季');
+  const old=$('#season').value;$('#season').innerHTML=manifest.map(s=>`<option value="${esc(s.id)}">${esc(s.id)} (${s.games||0} 場)</option>`).join('');
+  const id=manifest.some(s=>s.id===old)?old:manifest[0].id;$('#season').value=id;
+  await loadSeason(id);
+ }catch(err){
+  try{const res=await fetch('./data/nba.json?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);archive=await res.json();sourceMode='recent';joined=joinGames(archive);manifest=[];
+    $('#season').innerHTML=`<option value="recent">${esc(archive.season||'2026-27')}（近期資料）</option>`;
+    setPlayers();$('#sourceStatus').textContent=`暫用近期數據｜更新：${textDates(archive.generated_at)}｜${joined.length} 筆球員紀錄`;
+    $('#sourceBadge').textContent='近期資料（非整季）';
+    $('#warning').innerHTML='<div class="alert">歷史資料尚未建立：目前僅顯示原網站的近期球員數據，不能當作完整賽季對戰平均。請執行 GitHub Actions「NBA Player Opponent History」。</div>';
+    render();
+  }catch(err2){$('#sourceStatus').textContent='讀取失敗';$('#warning').innerHTML='<div class="alert">無法載入任何資料：'+esc(err2.message)+'。請在 GitHub Pages 而非直接開啟本機 file:// 使用。</div>'}
+ }
+}
+function exportCSV(){if(!visibleGames.length)return alert('目前沒有可匯出的資料');
+ const cols=['date','name','team','opponent','minutes','fgm','fga','ftm','fta','tpm','pts','reb','ast','stl','blk','tov','game_id'];
+ const safe=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+ const content='\ufeff'+[cols.join(','),...visibleGames.map(r=>cols.map(k=>safe(r[k])).join(','))].join('\r\n');
+ const blob=new Blob([content],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download='nba_opponent_'+($('#season').value||'season')+'_'+(chosenId||'player')+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+$('#season').onchange=async e=>{if(manifest.length)try{await loadSeason(e.target.value)}catch(err){$('#warning').innerHTML='<div class="alert">載入賽季失敗：'+esc(err.message)+'</div>'}};
+$('#playerInput').onchange=e=>{const q=e.target.value.trim().toLowerCase();const match=available.find(p=>p.name.toLowerCase()===q)||available.find(p=>p.name.toLowerCase().includes(q));if(match){chosenId=match.id;e.target.value=match.name;render()}else{e.target.value=available.find(p=>p.id===chosenId)?.name||'';}};
+$('#playerInput').onkeydown=e=>{if(e.key==='Enter'){e.target.blur()}};
+$('#opponent').onchange=render;$('#recent').onchange=render;$('#phase').onchange=render;
+$('#reload').onclick=init;$('#export').onclick=exportCSV;
+init();
+</script>
+</body>
+</html>
