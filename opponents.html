@@ -52,6 +52,17 @@ const shots=(m,a)=>num(m)!==null&&num(a)!==null?Math.round(m)+'/'+Math.round(a):
 const pct=(m,a)=>num(m)!==null&&num(a)!==null&&a>0?(m/a).toFixed(3).replace(/^0/,''):'—';
 const fields=['tpm','pts','reb','ast','stl','blk','tov'];
 const textDates=s=>s?new Date(s).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+function fantasyDay(value){
+  if(!value)return '';
+  const t=new Date(value);if(Number.isNaN(t.getTime()))return '';
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(t);
+  const get=k=>parts.find(p=>p.type===k)?.value||'';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function twStart(value){
+  if(!value)return '—';const t=new Date(value);if(Number.isNaN(t.getTime()))return '—';
+  return t.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+}
 let manifest=[],archive=null,available=[],chosenId='',joined=[],visibleGames=[],sortKey='gp',sortDesc=true,sourceMode='history';
 
 function aggregate(rows){
@@ -71,7 +82,7 @@ function joinGames(data){
    const team=abbr(p.team),home=abbr(g.home),away=abbr(g.away);
    const opp=team===home?away:team===away?home:'';
    if(!opp||opp==='TBD')continue;
-   found.push({...p,opponent:opp,team,phase:g.phase||'unknown',isComplete:!!g.completed});
+   found.push({...p,date:fantasyDay(g.start_time||p.start_time)||p.date,start_time:p.start_time||g.start_time,opponent:opp,team,phase:g.phase||'unknown',isComplete:!!g.completed});
  }return found;
 }
 function playersAvailable(){
@@ -112,7 +123,7 @@ function render(){
  $('#opponentRows').innerHTML=byOpp.length?byOpp.map(r=>'<tr>'+labels.map(([key])=>`<td>${show(r,key)}${key==='gp'&&r.gp<3?' <span class="warn" title="樣本數較少">⚠</span>':''}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="14" class="muted">這個球員在所選條件下沒有已取得的對戰紀錄。</td></tr>';
  document.querySelectorAll('[data-sort]').forEach(el=>el.onclick=()=>{const key=el.dataset.sort;if(key===sortKey)sortDesc=!sortDesc;else{sortKey=key;sortDesc=key!=='opp'}render()});
  const logKeys=['date','opponent','minutes','fg','fgshots','ft','ftshots','tpm','pts','reb','ast','stl','blk','tov'];
- const logValue=(r,key)=>key==='date'?esc(r.date):key==='opponent'?esc(r.opponent):key==='fg'?pct(r.fgm,r.fga):key==='ft'?pct(r.ftm,r.fta):key==='fgshots'?shots(r.fgm,r.fga):key==='ftshots'?shots(r.ftm,r.fta):key==='minutes'?esc(r.minutes||'—'):fmtInt(num(r[key]));
+ const logValue=(r,key)=>key==='date'?esc(r.date)+'<div class="muted" style="font-size:11px">台灣 '+esc(twStart(r.start_time))+'</div>':key==='opponent'?esc(r.opponent):key==='fg'?pct(r.fgm,r.fga):key==='ft'?pct(r.ftm,r.fta):key==='fgshots'?shots(r.fgm,r.fga):key==='ftshots'?shots(r.ftm,r.fta):key==='minutes'?esc(r.minutes||'—'):fmtInt(num(r[key]));
  $('#gameRows').innerHTML=visibleGames.length?visibleGames.map(r=>'<tr>'+logKeys.map(k=>`<td>${logValue(r,k)}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="14" class="muted">無已取得的比賽紀錄</td></tr>';
  const availablePhases=[...new Set(joined.filter(p=>String(p.id||p.name)===chosenId).map(p=>p.phase))];
  $('#dataNote').textContent=`目前球員：${available.find(p=>p.id===chosenId)?.name||'—'}｜已取得 ${joined.filter(p=>String(p.id||p.name)===chosenId).length} 場｜資料涵蓋 ${joined.length} 筆可辨識對手的球員比賽紀錄。${availablePhases.includes('unknown')?'部分舊資料未標記例行賽或季後賽，選擇「例行賽」可能不包含它們。':''}`;

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from update_data import BASE, get_json, parse_event, boxscore_players, ET, TZ
+from update_data import BASE, get_json, parse_event, boxscore_players, ET, TZ, fantasy_day
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
@@ -203,14 +203,26 @@ def main():
 
     # Some historical snapshots lack a complete season or game identity.
     # Never invent an opponent when the game id cannot be joined.
+    # Align all stored history dates with Yahoo Fantasy matchup dates.
+    for g in games.values():
+        if g.get('start_time'):
+            g['date'] = fantasy_day(g['start_time'])
+    for (gid, _), p in players.items():
+        g = games.get(gid)
+        when = p.get('start_time') or (g or {}).get('start_time')
+        if when:
+            p['date'] = fantasy_day(when)
+        elif g:
+            p['date'] = g.get('date', p.get('date', ''))
+
     valid_players = [p for (gid, _), p in players.items() if gid in games]
     valid_players.sort(key=lambda p: (p.get('date', ''), str(p.get('game_id', '')), p.get('name', '')))
     valid_games = sorted(games.values(), key=lambda g: (g.get('date', ''), str(g.get('id', ''))))
     new_doc = {
         'schema_version': 1, 'season': args.season,
         'source': 'ESPN public site API (unofficial; completeness not guaranteed)',
-        'calendar_timezone': 'Asia/Taipei',
-        'date_basis': 'tipoff_utc_to_Asia/Taipei',
+        'calendar_timezone': 'America/New_York', 'display_timezone': 'Asia/Taipei',
+        'date_basis': 'tipoff_utc_to_America/New_York',
         'generated_at': old.get('generated_at', ''),
         'fetched_days': sorted(done_days), 'boxscore_fetched': sorted(done_boxes),
         'warnings': warnings[:30], 'games': valid_games, 'player_games': valid_players,

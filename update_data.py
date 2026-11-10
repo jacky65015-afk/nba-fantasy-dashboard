@@ -37,8 +37,8 @@ def team_entry(team):
 TZ = ZoneInfo('Asia/Taipei')
 ET = ZoneInfo('America/New_York')
 
-def taiwan_day(value):
-    """Return Asia/Taipei calendar date from the event's UTC tipoff."""
+def fantasy_day(value):
+    """Return the Yahoo/NBA US Eastern game date from the event UTC tipoff."""
     if not value:
         return ''
     try:
@@ -46,7 +46,7 @@ def taiwan_day(value):
         if instant.tzinfo is None:
             # An unqualified date is not enough to safely convert time zones.
             return value[:10]
-        return instant.astimezone(TZ).date().isoformat()
+        return instant.astimezone(ET).date().isoformat()
     except (ValueError, TypeError, OverflowError):
         return value[:10]
 
@@ -58,7 +58,7 @@ def parse_event(event):
     st = c.get('status') or event.get('status') or {}
     ty = st.get('type') or {}
     tipoff = event.get('date') or c.get('date') or ''
-    return {'id': str(event.get('id', '')), 'date': taiwan_day(tipoff), 'start_time': tipoff,
+    return {'id': str(event.get('id', '')), 'date': fantasy_day(tipoff), 'start_time': tipoff,
             'home': (home.get('team') or {}).get('abbreviation', ''), 'away': (away.get('team') or {}).get('abbreviation', ''),
             'home_score': home.get('score'), 'away_score': away.get('score'), 'status': ty.get('name', ''),
             'status_text': ty.get('shortDetail') or st.get('displayClock') or ty.get('description') or '',
@@ -178,17 +178,17 @@ def normalize_existing(old):
     """Use actual tipoff time; mark old untimed US calendar dates as inferred.
 
     Existing historical records lacking timestamps are provisionally shifted
-    to the next Taiwan date, matching most US evening NBA games. Early US
+    to the next Taiwan date. We do not apply this legacy guess after migration. Early US
     games can fall on the same Taiwan date. Later scoreboard refreshes fix
     those entries when the true UTC start time becomes available.
     """
-    legacy_us_dates = not old.get('date_basis')
+    legacy_us_dates = False  # Never guess an untimed date; wait for an accurate tipoff.
     by_id = {}
     for g in old.get('games') or []:
         if not isinstance(g, dict):
             continue
         if g.get('start_time'):
-            g['date'] = taiwan_day(g['start_time'])
+            g['date'] = fantasy_day(g['start_time'])
             g.pop('date_inferred', None)
         elif legacy_us_dates and g.get('date'):
             try:
@@ -203,7 +203,7 @@ def normalize_existing(old):
             continue
         g = by_id.get(str(p.get('game_id', '')))
         if p.get('start_time'):
-            p['date'] = taiwan_day(p['start_time'])
+            p['date'] = fantasy_day(p['start_time'])
             p.pop('date_inferred', None)
         elif g:
             p['date'] = g['date']
@@ -305,15 +305,15 @@ def live_update(old):
     rows = merge_boxscores(old.get('player_games') or [], fresh_rows, successful_ids)
     if fresh_rows and not any(p.get('reb') is not None for p in fresh_rows):
         warnings.append('本次即時 Box Score 全部 REB 缺漏。請查看 GitHub Actions 的 ESPN_STAT_HEADERS 紀錄。')
-    # Any preserved record with start_time should always use its genuine Taiwan date.
+    # Any preserved record with start_time should always use its genuine US/Eastern game date.
     for p in rows:
         if p.get('start_time'):
-            p['date'] = taiwan_day(p['start_time'])
+            p['date'] = fantasy_day(p['start_time'])
     payload = {
         **old,
         'source': 'ESPN public site API (unofficial / not guaranteed)',
-        'calendar_timezone': 'Asia/Taipei',
-        'date_basis': 'tipoff_utc_to_Asia/Taipei',
+        'calendar_timezone': 'America/New_York', 'display_timezone': 'Asia/Taipei',
+        'date_basis': 'tipoff_utc_to_America/New_York',
         'generated_at': now.isoformat(timespec='seconds').replace('+00:00','Z'),
         'games': games,
         'player_games': rows,
@@ -332,7 +332,7 @@ def main(live=False):
     previous = json.loads(json.dumps(old))
     old = normalize_existing(old)
     now = dt.datetime.now(dt.timezone.utc)
-    # Query ESPN by its US/Eastern scoreboard calendar, but OUTPUT all game dates in Asia/Taipei.
+    # Query ESPN by its US/Eastern scoreboard calendar, but OUTPUT US/Eastern NBA matchup dates.
     try:
         today = now.astimezone(ET).date()
     except Exception:
@@ -394,10 +394,10 @@ def main(live=False):
         games = old['games']
     elif not games:
         warnings.append('賽程尚無可用資料，請檢查 ESPN 來源或網路。')
-    # Select recent Taiwan dates, not Eastern dates, and include active games.
-    today_taiwan = now.astimezone(TZ).date()
+    # Select recent US/Eastern NBA game dates, and include active games.
+    today_fantasy = now.astimezone(ET).date()
     recent = [g for g in games if (g.get('completed') or g.get('status') in ('STATUS_IN_PROGRESS','STATUS_HALFTIME'))
-              and str(today_taiwan-dt.timedelta(days=7)) <= g['date'] <= str(today_taiwan)]
+              and str(today_fantasy-dt.timedelta(days=7)) <= g['date'] <= str(today_fantasy)]
     player_games = []
     def fetch_summary(game):
         obj = get_json(BASE + '/summary?' + urllib.parse.urlencode({'event': game['id']}), retries=1)
@@ -416,7 +416,7 @@ def main(live=False):
     else:
         new_game_ids = {str(p.get('game_id')) for p in player_games if p.get('game_id')}
         old_keep = [p for p in old.get('player_games') or [] if str(p.get('game_id')) not in new_game_ids
-                    and p.get('date','') >= str(today_taiwan - dt.timedelta(days=8))]
+                    and p.get('date','') >= str(today_fantasy - dt.timedelta(days=8))]
         player_games = old_keep + player_games
     # Preserve the last known rebound when ESPN sends partial in-game values.
     older_by_id = {(str(p.get('game_id','')), str(p.get('id',''))): p
@@ -446,7 +446,7 @@ def main(live=False):
     data = {
         'generated_at': now.isoformat(timespec='seconds').replace('+00:00','Z'),
         'source': 'ESPN public site API (unofficial / not guaranteed)',
-        'season': '2026-27', 'calendar_timezone': 'Asia/Taipei', 'date_basis': 'tipoff_utc_to_Asia/Taipei', 'warnings': warnings[:45],
+        'season': '2026-27', 'calendar_timezone': 'America/New_York', 'display_timezone': 'Asia/Taipei', 'date_basis': 'tipoff_utc_to_America/New_York', 'warnings': warnings[:45],
         'games': games, 'player_games': player_games,
         'injuries': injury_rows, 'teams': sorted(teams_by_abbr.values(), key=lambda t: t['abbr'])
     }
