@@ -7,7 +7,7 @@
 <style>
 :root{color-scheme:dark;--bg:#080e1b;--pane:#111b2e;--pane2:#16243a;--edge:#293952;--text:#edf4ff;--muted:#98acc8;--blue:#7cbbff;--teal:#4ce4c7;--yellow:#ffd27f}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top right,#142547 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,'Noto Sans TC','Microsoft JhengHei',sans-serif}a{color:var(--blue)}
-main{max-width:1500px;margin:auto;padding:28px 22px 55px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:47px;height:47px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(130deg,#376ed5,#28bcae);font-size:25px}.eyebrow{font-size:11px;letter-spacing:1.5px;color:var(--teal);font-weight:800}h1{font-size:22px;margin:0}.button{display:inline-block;text-decoration:none;background:#1a2b44;border:1px solid #385374;color:#e6f0ff;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer}.button:hover{background:#294566}.panel{background:var(--pane);border:1px solid var(--edge);border-radius:15px;padding:19px;margin-bottom:16px}.panel h2{font-size:17px;margin:0 0 4px}.small{font-size:12px;color:var(--muted)}.alert{background:#332a1b;border:1px solid #7b6334;border-radius:11px;padding:11px 13px;color:#f0d9ae;font-size:12px;margin:12px 0}.ok{color:#7af2c7}.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}.field label{display:block;font-size:12px;color:#a8c1df;margin-bottom:6px}.field input,.field select{width:100%;min-width:0;border-radius:9px;padding:10px 11px;color:#eaf2ff;background:#0c182b;border:1px solid #36506f;font:inherit}#playerInput{width:100%}input:focus,select:focus{outline:2px solid #527db9;outline-offset:1px}.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}.stat{border:1px solid var(--edge);background:#122139;border-radius:12px;padding:13px 14px}.stat small{display:block;color:#9eb7d6;margin-bottom:7px}.stat strong{font-size:23px;font-variant-numeric:tabular-nums}.pill{font-size:11px;border:1px solid #355271;border-radius:999px;padding:3px 10px;color:#accbec;white-space:nowrap}.heading{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.heading h2{margin:0}.wrap{overflow:auto;border:1px solid var(--edge);border-radius:10px;max-height:610px}table{border-collapse:collapse;width:100%;white-space:nowrap;font-variant-numeric:tabular-nums}th,td{padding:10px 11px;border-bottom:1px solid #283a52;font-size:12px;text-align:right}th{background:#1b2a40;color:#aec5df;position:sticky;top:0;z-index:1;font-size:11px}td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:#15253b;z-index:2}th:first-child{z-index:3;background:#1b2a40}tr:hover td{background:#1b304b}tr:hover td:first-child{background:#1b304b}th button{border:0;background:none;color:inherit;cursor:pointer;font:inherit;font-weight:800;padding:0;white-space:nowrap}th button:hover{color:#74e2d2}tbody tr:last-child td{border-bottom:0}.warn{color:#ffd27f}.muted{color:#9dafc8}.strong{color:#7decd2;font-weight:800}.table-title{font-weight:800;color:#e5f6ff}.foot{margin-top:13px;color:#9db4d0;font-size:12px}.empty{border:1px dashed #3c5674;border-radius:10px;padding:35px;text-align:center;color:#aac1df}.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.hint{margin-top:8px;color:#a4b9d5;font-size:12px}footer{color:#90a8c6;text-align:center;font-size:12px;margin:22px 0}@media(max-width:1100px){.filters{grid-template-columns:repeat(3,minmax(0,1fr))}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){main{padding:15px 10px 40px}h1{font-size:18px}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.field.player{grid-column:span 2}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:13px}.stat strong{font-size:20px}}
+main{max-width:1500px;margin:auto;padding:28px 22px 55px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:47px;height:47px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(130deg,#376ed5,#28bcae);font-size:25px}.eyebrow{font-size:11px;letter-spacing:1.5px;color:var(--teal);font-weight:800}h1{font-size:22px;margin:0}.button{display:inline-block;text-decoration:none;background:#1a2b44;border:1px solid #385374;color:#e6f0ff;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer}.button:hover{background:#294566}.panel{background:var(--pane);border:1px solid var(--edge);border-radius:15px;padding:19px;margin-bottom:16px}.panel h2{font-size:17px;margin:0 0 4px}.small{font-size:12px;color:var(--muted)}.alert{background:#332a1b;border:1px solid #7b6334;border-radius:11px;padding:11px 13px;color:#f0d9ae;font-size:12px;margin:12px 0}.ok{color:#7af2c7}.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}.field label{display:block;font-size:12px;color:#a8c1df;margin-bottom:6px}.field input,.field select{width:100%;min-width:0;border-radius:9px;padding:10px 11px;color:#eaf2ff;background:#0c182b;border:1px solid #36506f;font:inherit}#playerInput{width:100%}.player-tools{display:flex;gap:7px}.player-tools select{flex:1;min-width:0}.player-tools input{flex:1;min-width:0}.player-tools button{flex:0 0 auto;padding:9px 10px;border-radius:9px;background:#1a2b44;color:#edf4ff;border:1px solid #36506f;cursor:pointer}.roster-note{font-size:11px;color:#9dafc8;margin-top:4px}input:focus,select:focus{outline:2px solid #527db9;outline-offset:1px}.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}.stat{border:1px solid var(--edge);background:#122139;border-radius:12px;padding:13px 14px}.stat small{display:block;color:#9eb7d6;margin-bottom:7px}.stat strong{font-size:23px;font-variant-numeric:tabular-nums}.pill{font-size:11px;border:1px solid #355271;border-radius:999px;padding:3px 10px;color:#accbec;white-space:nowrap}.heading{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.heading h2{margin:0}.wrap{overflow:auto;border:1px solid var(--edge);border-radius:10px;max-height:610px}table{border-collapse:collapse;width:100%;white-space:nowrap;font-variant-numeric:tabular-nums}th,td{padding:10px 11px;border-bottom:1px solid #283a52;font-size:12px;text-align:right}th{background:#1b2a40;color:#aec5df;position:sticky;top:0;z-index:1;font-size:11px}td:first-child,th:first-child{text-align:left;position:sticky;left:0;background:#15253b;z-index:2}th:first-child{z-index:3;background:#1b2a40}tr:hover td{background:#1b304b}tr:hover td:first-child{background:#1b304b}th button{border:0;background:none;color:inherit;cursor:pointer;font:inherit;font-weight:800;padding:0;white-space:nowrap}th button:hover{color:#74e2d2}tbody tr:last-child td{border-bottom:0}.warn{color:#ffd27f}.muted{color:#9dafc8}.strong{color:#7decd2;font-weight:800}.table-title{font-weight:800;color:#e5f6ff}.foot{margin-top:13px;color:#9db4d0;font-size:12px}.empty{border:1px dashed #3c5674;border-radius:10px;padding:35px;text-align:center;color:#aac1df}.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.hint{margin-top:8px;color:#a4b9d5;font-size:12px}footer{color:#90a8c6;text-align:center;font-size:12px;margin:22px 0}@media(max-width:1100px){.filters{grid-template-columns:repeat(3,minmax(0,1fr))}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){main{padding:15px 10px 40px}h1{font-size:18px}.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.field.player{grid-column:span 2}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:13px}.stat strong{font-size:20px}}
 
 .decision-grid{display:grid;grid-template-columns:1.2fr repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
 .decision-main{border:1px solid #355271;background:#0e1e33;border-radius:12px;padding:14px}
@@ -31,7 +31,7 @@ main{max-width:1500px;margin:auto;padding:28px 22px 55px}.top{display:flex;align
     <div class="heading"><div><h2>球員 × 對戰球隊 × 9CAT</h2><div class="small" id="sourceStatus">載入資料中…</div></div><span class="pill" id="sourceBadge">NBA 公開資料</span></div>
     <div class="filters">
       <div class="field"><label for="season">賽季</label><select id="season"></select></div>
-      <div class="field player"><label for="playerInput">球員姓名（可輸入搜尋）</label><input id="playerInput" list="playerNames" placeholder="搜尋 Maxey、Traoré…" autocomplete="off"><datalist id="playerNames"></datalist></div>
+      <div class="field player"><label for="rosterSelect">我的隊伍球員（下拉選擇）</label><select id="rosterSelect"><option value="">載入隊伍名單中…</option></select><div class="player-tools" style="margin-top:7px"><input id="playerInput" list="playerNames" placeholder="其他球員：輸入姓名搜尋…" autocomplete="off" aria-label="搜尋其他 NBA 球員"><datalist id="playerNames"></datalist><button id="playerSearch" type="button">搜尋</button></div><div class="roster-note" id="rosterNote"></div></div>
       <div class="field"><label for="opponent">對手球隊</label><select id="opponent"><option value="ALL">全部 30 隊</option></select></div>
       <div class="field"><label for="recent">統計期間</label><select id="recent"><option value="ALL">本賽季所有已取得比賽</option><option value="5">最近 5 場</option><option value="10">最近 10 場</option><option value="30">最近 30 場</option></select></div>
       <div class="field"><label for="phase">賽事類型</label><select id="phase"><option value="ALL">全部賽事</option><option value="regular">例行賽（已標記）</option><option value="playoffs">季後賽（已標記）</option></select></div>
@@ -84,6 +84,45 @@ const query=new URLSearchParams(location.search);
 const requestedPlayer=(query.get('player')||'').trim();
 const requestedOpponent=abbr((query.get('opponent')||'').trim());
 const requestedLeague=(query.get('league')||'').trim().toLowerCase();
+
+// Snapshot roster hints are NOT live Yahoo rosters. For exact rosters supply
+// data/fantasy_rosters.json: {"shark":["Player Name", ...], "cpc": [...]}
+const rosterSnapshots={
+ shark:['Josh Giddey','Austin Reaves','Alperen Sengun','Brandon Miller','Ivica Zubac','Kel’el Ware','VJ Edgecombe','Ty Jerome','Myles Turner','RJ Barrett','Duncan Robinson','Jeremiah Fears','Paul Reed','Carson'],
+ shai:['Shai Gilgeous-Alexander','Evan Mobley','Trey Murphy III','Desmond Bane','Dyson Daniels','Kel’el Ware','VJ Edgecombe','Josh Hart','Andrew Nembhard','Tari Eason','Christian Braun','Yves Missi','Tristan da Silva','Ryan Kalkbrenner','Meleek Thomas'],
+ cade:['Cade Cunningham','Domantas Sabonis','Deni Avdija','Matas Buzelis','Dyson Daniels','VJ Edgecombe','Ty Jerome','Josh Hart','Myles Turner','Alperen Sengun','Franz Wagner','Ajay Mitchell','Ace Bailey'],
+ greek:['Giannis Antetokounmpo','Alperen Sengun','LeBron James','Dyson Daniels','OG Anunoby','Payton Pritchard','Myles Turner','Toumani Camara','Keegan Murray','Ty Jerome','Jalen Smith','Anthony Black','Nolan Traore'],
+ flagship:['Cooper Flagg','Jalen Johnson','Stephon Castle','Cameron Boozer','Jaden McDaniels','Walker Kessler','Jarrett Allen','Yaxel Lendeborg','Paul Reed','Jaime Jaquez Jr.','Kyshawn George','Anthony Black','Jeremiah Fears','Jalen Duren','Ivica Zubac','Ty Jerome'],
+ cpc:['Tyrese Maxey','LeBron James','Joel Embiid','Jaylen Brown','VJ Edgecombe','Michael Porter Jr.','Rudy Gobert','Mikal Bridges','Desmond Bane','Tari Eason','Neemias Queta','Nic Claxton','Meleek Thomas','Ja’Kobe Walter','Carson']
+};
+const leagueAliases={shai:'shai',shark:'shark',cade:'cade',fullcade:'cade',greek:'greek',flagship:'flagship',cpc:'cpc'};
+let rosterOverrides=null;
+const normalizeName=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘`]/g,"'").replace(/[^a-z0-9]/gi,'').toLowerCase();
+function getRoster(){
+ const key=leagueAliases[requestedLeague]||requestedLeague;
+ const raw=rosterOverrides?.[key]||rosterSnapshots[key]||[];
+ return [...new Set(raw.filter(Boolean).map(x=>typeof x==='string'?x:x.name).filter(Boolean))];
+}
+function findPlayer(name){return available.find(p=>normalizeName(p.name)===normalizeName(name))||null;}
+function selectPlayer(name){
+ const found=findPlayer(name);
+ chosenId=found?.id||('missing:'+name);
+ $('#playerInput').value='';
+ $('#rosterSelect').value=getRoster().find(n=>normalizeName(n)===normalizeName(name))||'';
+ render();
+}
+function renderRoster(){
+ const names=getRoster();const select=$('#rosterSelect');
+ const current=available.find(p=>p.id===chosenId)?.name||(chosenId.startsWith('missing:')?chosenId.slice(8):'');
+ const title=names.length?'選擇隊內球員':'尚無此聯盟名單，請使用右側搜尋';
+ select.innerHTML='<option value="">'+esc(title)+'</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+ select.value=names.find(n=>normalizeName(n)===normalizeName(current))||'';
+ $('#rosterNote').textContent=rosterOverrides?'隊內名單：網站提供的名單檔；其餘 NBA 球員請用搜尋。':'隊內名單：已知快照（非 Yahoo 即時同步）；其餘 NBA 球員請用搜尋。';
+}
+async function loadRosterOverrides(){
+ try{const r=await fetch('./data/fantasy_rosters.json?v='+Date.now(),{cache:'no-store'});if(r.ok){const x=await r.json();if(x&&typeof x==='object')rosterOverrides=x.leagues||x;}}catch(e){}
+}
+
 
 
 
@@ -200,17 +239,19 @@ function setPlayers(){
  $('#playerNames').innerHTML=available.map(p=>`<option value="${esc(p.name)}"></option>`).join('');
  const exact=available.find(p=>p.id===chosenId);
  if(!exact){
-   const previous=$('#playerInput').value.trim().toLowerCase();
-   const deep=requestedPlayer?available.find(p=>p.name.toLowerCase()===requestedPlayer.toLowerCase())||available.find(p=>p.name.toLowerCase().includes(requestedPlayer.toLowerCase())):null;
-   const match=deep||available.find(p=>p.name.toLowerCase()===previous)||available.find(p=>p.name==='Tyrese Maxey')||available[0];
-   chosenId=match?.id||'';
+  const wanted=chosenId.startsWith('missing:')?chosenId.slice(8):requestedPlayer;
+  const match=wanted?findPlayer(wanted):null;
+  const rosterMatch=getRoster().map(findPlayer).find(Boolean);
+  const fallback=match||(!wanted&&(rosterMatch||available.find(p=>p.name==='Tyrese Maxey')||available[0]));
+  chosenId=fallback?.id||(wanted?'missing:'+wanted:'');
  }
- $('#playerInput').value=available.find(p=>p.id===chosenId)?.name||'';
+ renderRoster();
  const teams=[...new Set(joined.map(p=>p.opponent).filter(Boolean))].sort();
  const old=$('#opponent').value||'ALL';
  $('#opponent').innerHTML='<option value="ALL">全部 30 隊</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
  $('#opponent').value=teams.includes(requestedOpponent)?requestedOpponent:(teams.includes(old)?old:'ALL');
 }
+
 function getSelectedRows(){
  let rows=joined.filter(p=>String(p.id||p.name)===chosenId).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.game_id).localeCompare(String(a.game_id)));
  const phase=$('#phase').value;
@@ -240,7 +281,7 @@ function render(){
  $('#gameRows').innerHTML=visibleGames.length?visibleGames.map(r=>'<tr>'+logKeys.map(k=>`<td>${logValue(r,k)}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="14" class="muted">無已取得的比賽紀錄</td></tr>';
  renderDecision();
  const availablePhases=[...new Set(joined.filter(p=>String(p.id||p.name)===chosenId).map(p=>p.phase))];
- $('#dataNote').textContent=`目前球員：${available.find(p=>p.id===chosenId)?.name||'—'}｜已取得 ${joined.filter(p=>String(p.id||p.name)===chosenId).length} 場｜資料涵蓋 ${joined.length} 筆可辨識對手的球員比賽紀錄。${availablePhases.includes('unknown')?'部分舊資料未標記例行賽或季後賽，選擇「例行賽」可能不包含它們。':''}`;
+ $('#dataNote').textContent=`目前球員：${available.find(p=>p.id===chosenId)?.name||(chosenId.startsWith('missing:')?chosenId.slice(8):'—')}｜已取得 ${joined.filter(p=>String(p.id||p.name)===chosenId).length} 場｜資料涵蓋 ${joined.length} 筆可辨識對手的球員比賽紀錄。${availablePhases.includes('unknown')?'部分舊資料未標記例行賽或季後賽，選擇「例行賽」可能不包含它們。':''}`;
 }
 async function loadSeason(id){
  const picked=manifest.find(s=>s.id===id);if(!picked)throw Error('找不到賽季資料');
@@ -252,6 +293,7 @@ async function loadSeason(id){
  render();
 }
 async function init(){
+ await loadRosterOverrides();
  $('#sourceStatus').textContent='正在檢查歷史資料…';
  try{
   const res=await fetch('./data/history/index.json?v='+Date.now(),{cache:'no-store'});
@@ -278,8 +320,16 @@ function exportCSV(){if(!visibleGames.length)return alert('目前沒有可匯出
  const blob=new Blob([content],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');const url=URL.createObjectURL(blob);link.href=url;link.download='nba_opponent_'+($('#season').value||'season')+'_'+(chosenId||'player')+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),500);
 }
 $('#season').onchange=async e=>{if(manifest.length)try{await loadSeason(e.target.value)}catch(err){$('#warning').innerHTML='<div class="alert">載入賽季失敗：'+esc(err.message)+'</div>'}};
-$('#playerInput').onchange=e=>{const q=e.target.value.trim().toLowerCase();const match=available.find(p=>p.name.toLowerCase()===q)||available.find(p=>p.name.toLowerCase().includes(q));if(match){chosenId=match.id;e.target.value=match.name;render()}else{e.target.value=available.find(p=>p.id===chosenId)?.name||'';}};
-$('#playerInput').onkeydown=e=>{if(e.key==='Enter'){e.target.blur()}};
+$('#rosterSelect').onchange=e=>{if(e.target.value)selectPlayer(e.target.value)};
+function searchPlayer(){
+ const q=$('#playerInput').value.trim();if(!q)return;
+ const match=findPlayer(q)||available.find(p=>normalizeName(p.name).includes(normalizeName(q)));
+ if(match)selectPlayer(match.name);
+ else{chosenId='missing:'+q;$('#rosterSelect').value='';render();$('#dataNote').textContent='查無「'+q+'」於此賽季已取得的資料；請檢查賽季或姓名。';}
+}
+$('#playerSearch').onclick=searchPlayer;
+$('#playerInput').onkeydown=e=>{if(e.key==='Enter')searchPlayer()};
+$('#playerInput').onchange=()=>{if($('#playerInput').value.trim())searchPlayer()};
 $('#opponent').onchange=render;$('#recent').onchange=render;$('#phase').onchange=render;
 $('#reload').onclick=init;$('#export').onclick=exportCSV;
 init();
